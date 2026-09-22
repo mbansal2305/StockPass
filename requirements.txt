@@ -3,3 +3,4 @@ django-ninja==1.7.1
 psycopg==3.3.6
 psycopg-binary==3.3.6
 dotenv==0.9.9
+uvicorn==0.53.0

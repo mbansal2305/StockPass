@@ -1,13 +1,8 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.contrib.auth.models import AbstractUser, BaseUserManager, Group
-from django.db import models
-from django.utils import timezone
-from django.conf import settings
-
 
 
 class User(AbstractUser):
-
 
     class Role(models.TextChoices):
         OWNER = "OWNER", "Owner"
@@ -21,19 +16,25 @@ class User(AbstractUser):
         default=Role.LABOUR,
     )
 
+    profile_picture = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+    )
 
-    profile_picture = models.URLField(max_length=500, blank=True, null=True)
-    last_login = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=False)
-    gender_code = models.CharField(max_length=5, blank=True, null=True)
-    phone_number = models.CharField(max_length=15, blank=True, null=True)
 
+    gender_code = models.CharField(
+        max_length=5,
+        blank=True,
+        null=True,
+    )
 
-    def save(self, *args, **kwargs):
-        self.username = self.email
-        if not self.pk:
-            self.last_login = timezone.now()
-        super().save(*args, **kwargs)
+    phone_number = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+    )
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
