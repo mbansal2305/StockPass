@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "StockPassCore",
+    "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
 ]
 
 MIDDLEWARE = [
@@ -89,6 +91,16 @@ DATABASES = {
         "HOST": os.getenv("DB_HOST", "localhost"),
         "PORT": os.getenv("DB_PORT", "5432"),
     }
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 AUTH_USER_MODEL = "StockPassCore.User"

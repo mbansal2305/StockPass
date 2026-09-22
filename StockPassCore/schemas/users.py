@@ -47,3 +47,9 @@ class LoginSchema(Schema):
 
 class ChangePasswordSchema(Schema):
     new_password: str
+
+class RefreshTokenSchema(Schema):
+    refresh_token: str
+
+class LogoutSchema(Schema):
+    refresh_token: str

@@ -1,12 +1,40 @@
-from ninja.security import SessionAuth
+from ninja.security import HttpBearer
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
-class OwnerAdminAuth(SessionAuth):
+class JWTAuth(HttpBearer):
 
-    def authenticate(self, request, key=None):
-        user = request.user
+    def authenticate(self, request, token):
 
-        if not user.is_authenticated:
+        jwt_auth = JWTAuthentication()
+
+        try:
+            validated_token = jwt_auth.get_validated_token(token)
+            user = jwt_auth.get_user(validated_token)
+
+        except Exception:
+            return None
+
+        if not user.is_active:
+            return None
+
+        return user
+
+
+class OwnerAdminAuth(HttpBearer):
+
+    def authenticate(self, request, token):
+
+        jwt_auth = JWTAuthentication()
+
+        try:
+            validated_token = jwt_auth.get_validated_token(token)
+            user = jwt_auth.get_user(validated_token)
+
+        except Exception:
+            return None
+
+        if not user.is_active:
             return None
 
         if user.role not in [
