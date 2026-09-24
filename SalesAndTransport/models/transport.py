@@ -139,16 +139,16 @@ class Transport(BaseModel):
         db_index=True,
     )
 
-    wt_rcpt_src = models.ImageField(
-        upload_to="transport/weight_receipts/source/",
-        null=True,
+    wt_rcpt_src = models.URLField(
+        max_length=500,
         blank=True,
+        null=True,
     )
 
-    wt_rcpt_dst = models.ImageField(
-        upload_to="transport/weight_receipts/destination/",
-        null=True,
+    wt_rcpt_dst = models.URLField(
+        max_length=500,
         blank=True,
+        null=True,
     )
 
     class Meta:

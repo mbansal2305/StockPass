@@ -2,6 +2,7 @@ from ninja import NinjaAPI
 
 from StockPassCore.api.auth import router as auth_router
 from StockPassCore.api.users import router as users_router
+from SalesAndTransport.api.master import router as master_router
 
 
 api = NinjaAPI(
@@ -12,3 +13,5 @@ api = NinjaAPI(
 
 api.add_router("/auth/", auth_router)
 api.add_router("/users/", users_router)
+api.add_router("/master/", master_router)
+
