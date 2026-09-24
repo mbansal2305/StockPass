@@ -139,39 +139,13 @@ def update_user(
     return user
 
 
-# ENABLE USER
-@router.patch("/{user_id}/enable")
-def enable_user(request, user_id: int):
+# TOGGLE USER STATUS
+@router.patch("/{user_id}/toggle")
+def toggle_user_status(request, user_id: int):
     """
-    Enable a user.
+    Toggle a user's active status.
 
-    Only OWNER and ADMIN can enable users.
-    """
-
-    user = get_object_or_404(User, id=user_id)
-
-    if user.is_active:
-        return {
-            "success": True,
-            "message": "User is already enabled.",
-        }
-
-    user.is_active = True
-    user.save(update_fields=["is_active"])
-
-    return {
-        "success": True,
-        "message": "User enabled successfully.",
-    }
-
-
-# DISABLE USER
-@router.patch("/{user_id}/disable")
-def disable_user(request, user_id: int):
-    """
-    Disable a user.
-
-    A disabled user cannot log in.
+    A disabled user cannot log in. Users cannot disable their own account.
     """
 
     user = get_object_or_404(User, id=user_id)
@@ -180,24 +154,18 @@ def disable_user(request, user_id: int):
     # Prevent disabling yourself
     # --------------------------------------------------------
 
-    if user.id == request.user.id:
+    if user.id == request.user.id and user.is_active:
         return 400, {
             "success": False,
             "message": "You cannot disable your own account.",
         }
 
-    if not user.is_active:
-        return {
-            "success": True,
-            "message": "User is already disabled.",
-        }
-
-    user.is_active = False
+    user.is_active = not user.is_active
     user.save(update_fields=["is_active"])
 
     return {
         "success": True,
-        "message": "User disabled successfully.",
+        "message": f"User {'enabled' if user.is_active else 'disabled'} successfully.",
     }
 
 

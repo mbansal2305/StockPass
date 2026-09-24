@@ -16,10 +16,10 @@ class User(AbstractUser):
         default=Role.LABOUR,
     )
 
-    profile_picture = models.URLField(
-        max_length=500,
-        blank=True,
+    profile_picture = models.ImageField(
+        upload_to="users/profile/",
         null=True,
+        blank=True,
     )
 
     is_active = models.BooleanField(default=False)
