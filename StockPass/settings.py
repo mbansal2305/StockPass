@@ -63,6 +63,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://scorpion-abiding-structure.ngrok-free.dev",
 ]
 
 # CORS_ALLOW_ALL_ORIGINS = True
@@ -141,6 +142,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# APPEND_SLASH = True
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/

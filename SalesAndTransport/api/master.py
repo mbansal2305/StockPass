@@ -39,6 +39,10 @@ ENTITY_MODELS = {
 ENTITY_FIELDS = {
     "broker": {
         "name",
+        "phone_number",
+        "city",
+        "notes",
+        ""
     },
 
     "businessclient": {
@@ -48,15 +52,22 @@ ENTITY_FIELDS = {
         "pincode",
         "type",
         "flag",
+        "location_url",
+        "notes",
     },
 
     "commodity": {
         "name",
         "type",
+        "notes",
     },
 
     "transporter": {
         "name",
+        "agency",
+        "phone_number",
+        "city",
+        "notes",
     },
 }
 
@@ -64,6 +75,7 @@ ENTITY_FIELDS = {
 FILTER_FIELDS = {
     "broker": {
         "name",
+        "city",
     },
 
     "businessclient": {
@@ -82,6 +94,8 @@ FILTER_FIELDS = {
 
     "transporter": {
         "name",
+        "agency",
+        "city",
     },
 }
 
@@ -187,7 +201,7 @@ def paginate_queryset(queryset, page: int, page_size: int):
 # ADD
 # =========================================================
 
-@router.post("/add")
+@router.post("/add/")
 @transaction.atomic
 def add_entity(request, data: MasterAddUpdateSchema):
 
@@ -237,7 +251,7 @@ def add_entity(request, data: MasterAddUpdateSchema):
 # UPDATE
 # =========================================================
 
-@router.patch("/upd")
+@router.patch("/upd/")
 @transaction.atomic
 def update_entity(request, data: MasterAddUpdateSchema):
 
@@ -294,7 +308,7 @@ def update_entity(request, data: MasterAddUpdateSchema):
 # GET
 # =========================================================
 
-@router.get("/get")
+@router.get("/get/")
 def get_entity(request, data: MasterGetDeleteSchema):
 
     try:
@@ -324,7 +338,7 @@ def get_entity(request, data: MasterGetDeleteSchema):
 # DELETE
 # =========================================================
 
-@router.delete("/del")
+@router.delete("/del/")
 @transaction.atomic
 def delete_entity(request, data: MasterGetDeleteSchema):
 
@@ -366,7 +380,7 @@ def delete_entity(request, data: MasterGetDeleteSchema):
 # LIST
 # =========================================================
 
-@router.post("/lst")
+@router.post("/lst/")
 def list_entities(request, data: MasterListSchema):
 
     try:
@@ -408,7 +422,7 @@ def list_entities(request, data: MasterListSchema):
 # SEARCH
 # =========================================================
 
-@router.post("/search")
+@router.post("/search/")
 def search_entities(request, data: MasterSearchSchema):
 
     try:
