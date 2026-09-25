@@ -38,6 +38,12 @@ class BaseModel(models.Model):
         blank=True,
     )
 
+    notes = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+    )
+
     class Meta:
         abstract = True
 

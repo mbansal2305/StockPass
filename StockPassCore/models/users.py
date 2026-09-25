@@ -22,7 +22,7 @@ class User(AbstractUser):
         null=True,
     )
 
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
 
     gender_code = models.CharField(
         max_length=5,

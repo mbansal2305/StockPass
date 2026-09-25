@@ -18,7 +18,10 @@ router = Router()
 # LOGIN
 # ============================================================
 
-@router.post("/login")
+@router.post(
+    "/login",
+    response={200: dict, 401: dict, 403: dict},
+)
 def login_user(request, data: LoginSchema):
 
     user = authenticate(

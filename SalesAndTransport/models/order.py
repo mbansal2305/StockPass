@@ -15,6 +15,12 @@ class Order(BaseModel):
     class OrderStatus(models.TextChoices):
         PENDING = "pending"
         COMPLETED = "completed"
+        DRAFT = "draft"
+
+    class QuantityUnit(models.TextChoices):
+        MT = "mt"
+        QUINTAL = "quintal"
+        KG = "kg"
 
     type = models.CharField(
         max_length=20,
@@ -25,12 +31,16 @@ class Order(BaseModel):
     order_no = models.CharField(
         max_length=10,
         db_index=True,
+        null=True,
+        blank=True,
     )
 
     from_client = models.ForeignKey(
         BusinessClient,
         related_name="orders_from",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         
     )
 
@@ -38,6 +48,8 @@ class Order(BaseModel):
         BusinessClient,
         related_name="orders_to",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
 
     commodity = models.ForeignKey(
@@ -58,12 +70,24 @@ class Order(BaseModel):
         default=0,
     )
 
+    quantity_unit = models.CharField(
+        max_length=10,
+        choices=QuantityUnit.choices,
+        db_index=True,
+        default=QuantityUnit.QUINTAL,
+    )
+
     start_date = models.DateField(
         null=True,
         blank=True,
     )
 
     expiry_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+
+    contract_date = models.DateField(
         null=True,
         blank=True,
     )

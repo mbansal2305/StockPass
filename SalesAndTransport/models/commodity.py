@@ -15,6 +15,7 @@ class Commodity(BaseModel):
             blank=True
         )
 
+
     class Meta:
         db_table = "commodity"
         verbose_name = "Commodity"

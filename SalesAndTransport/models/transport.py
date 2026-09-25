@@ -9,6 +9,28 @@ class Transporter(BaseModel):
     name = models.CharField(
         max_length=255,
         db_index=True,
+        blank=True,
+        null=True,
+    )
+
+    agency = models.CharField(
+        max_length=255,
+        db_index=True,
+        blank=True,
+        null=True,
+    )
+
+    phone_number = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+    )
+
+    city = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        db_index=True,
     )
 
     class Meta:
@@ -17,10 +39,40 @@ class Transporter(BaseModel):
         verbose_name_plural = "Transporters"
         indexes = [
             models.Index(fields=["name"]),
+            models.Index(fields=["agency"]),
+            models.Index(fields=["city"]),
         ]
 
     def __str__(self):
         return self.name
+
+
+class BulkTransport(BaseModel):
+
+    title = models.CharField(
+            max_length=255,
+            db_index=True,
+            blank=True,
+            null=True,
+        )
+    
+    unload_date = models.DateField(
+            null=True,
+            blank=True,
+        )
+    
+    
+
+    class Meta:
+        db_table = "bulk_transport"
+        verbose_name = "Bulk Transport"
+        verbose_name_plural = "Bulk Transports"
+        indexes = [
+            models.Index(fields=["title"]),
+        ]
+
+    def __str__(self):
+        return self.title
 
 
 class Transport(BaseModel):
@@ -40,6 +92,14 @@ class Transport(BaseModel):
     bill_no = models.CharField(
         max_length=10,
         db_index=True,
+    )
+
+    bulk_transport = models.ForeignKey(
+        BulkTransport,
+        related_name="bulk_transport",
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True
     )
 
     commodity = models.ForeignKey(

@@ -9,6 +9,21 @@ class Broker(BaseModel):
         db_index=True,
     )
 
+    phone_number = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+    )
+
+    city = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        db_index=True,
+    )
+
+    
+
     class Meta:
         db_table = "broker"
         verbose_name = "Broker"

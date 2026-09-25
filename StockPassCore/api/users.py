@@ -77,7 +77,7 @@ def create_user(request, data: UserCreateSchema):
         phone_number=data.phone_number,
         gender_code=data.gender_code,
         profile_picture=data.profile_picture,
-        is_active=False,
+        is_active=True,
     )
 
     return user

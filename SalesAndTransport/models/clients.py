@@ -58,6 +58,13 @@ class BusinessClient(BaseModel):
         db_index=True,
     )
 
+    location_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+    )
+
+
     class Meta:
         db_table = "business_client"
         verbose_name = "Business Client"

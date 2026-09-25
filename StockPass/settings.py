@@ -31,9 +31,6 @@ SECRET_KEY = 'django-insecure-@dkeh$5uyw+yg1dax)wcnga)&s!e50dur1scf=8*^3gz5naohy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -68,11 +65,17 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+# CORS_ALLOW_ALL_ORIGINS = True
+
+
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "sharply-wriggly-curvy.ngrok-free.dev",
 ]
+
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = ["*"]
 
 ROOT_URLCONF = 'StockPass.urls'
 
@@ -110,8 +113,8 @@ DATABASES = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=31),
 
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
