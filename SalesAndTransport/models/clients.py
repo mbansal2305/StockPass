@@ -21,7 +21,7 @@ class BusinessClient(BaseModel):
         NEUTRAL = "neutral"
 
     name = models.CharField(
-        max_length=255,
+        max_length=100,
         db_index=True,
     )
 
@@ -31,14 +31,14 @@ class BusinessClient(BaseModel):
     )
 
     city = models.CharField(
-        max_length=100,
+        max_length=30,
         blank=True,
         null=True,
         db_index=True,
     )
 
     pincode = models.CharField(
-        max_length=10,
+        max_length=8,
         blank=True,
         null=True,
         db_index=True,

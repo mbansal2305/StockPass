@@ -17,6 +17,7 @@ from SalesAndTransport.schemas.master import (
     MasterAddUpdateSchema,
     MasterGetDeleteSchema,
     MasterListSchema,
+    MasterSelectSchema,
     MasterSearchSchema,
 )
 
@@ -419,6 +420,43 @@ def list_entities(request, data: MasterListSchema):
 
 
 # =========================================================
+# SELECT
+# =========================================================
+
+@router.post("/sel/")
+def select_entities(request, data: MasterSelectSchema):
+
+    try:
+        model = get_model(data.entity)
+
+        validate_filters(
+            data.entity,
+            data.filters,
+        )
+
+        queryset = model.objects.filter(
+            is_active=True
+        )
+
+        if data.filters:
+            queryset = queryset.filter(**data.filters)
+
+        queryset = queryset.order_by("id").values("id", "name")
+
+        return {
+            "success": True,
+            "entity": data.entity,
+            "data": list(queryset),
+        }
+
+    except ValueError as e:
+        return 400, {
+            "success": False,
+            "message": str(e),
+        }
+
+
+# =========================================================
 # SEARCH
 # =========================================================
 
@@ -460,3 +498,6 @@ def search_entities(request, data: MasterSearchSchema):
             "success": False,
             "message": str(e),
         }
+
+
+

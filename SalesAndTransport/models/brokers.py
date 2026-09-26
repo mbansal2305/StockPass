@@ -5,7 +5,7 @@ from StockPassCore.models import BaseModel
 
 class Broker(BaseModel):
     name = models.CharField(
-        max_length=255,
+        max_length=50,
         db_index=True,
     )
 
@@ -16,7 +16,7 @@ class Broker(BaseModel):
     )
 
     city = models.CharField(
-        max_length=100,
+        max_length=30,
         blank=True,
         null=True,
         db_index=True,

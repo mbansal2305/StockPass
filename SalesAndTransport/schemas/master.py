@@ -29,6 +29,11 @@ class MasterListSchema(Schema):
     page_size: int = 10
 
 
+class MasterSelectSchema(Schema):
+    entity: EntityType
+    filters: dict[str, Any] = {}
+
+
 class MasterSearchSchema(Schema):
     entity: EntityType
     search: str

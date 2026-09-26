@@ -29,7 +29,7 @@ class Order(BaseModel):
     )
 
     order_no = models.CharField(
-        max_length=10,
+        max_length=20,
         db_index=True,
         null=True,
         blank=True,

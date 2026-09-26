@@ -24,7 +24,7 @@ class OrderCreateSchema(Schema):
     contract_date: Optional[date] = None
     quantity_fulfilled: Decimal = Decimal("0")
     broker: Optional[int] = None
-    status: OrderStatus = "pending"
+    status: OrderStatus = "draft"
     notes: Optional[str] = None
 
 

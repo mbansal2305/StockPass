@@ -7,14 +7,14 @@ from .clients import BusinessClient
 
 class Transporter(BaseModel):
     name = models.CharField(
-        max_length=255,
+        max_length=50,
         db_index=True,
         blank=True,
         null=True,
     )
 
     agency = models.CharField(
-        max_length=255,
+        max_length=60,
         db_index=True,
         blank=True,
         null=True,
@@ -27,7 +27,7 @@ class Transporter(BaseModel):
     )
 
     city = models.CharField(
-        max_length=100,
+        max_length=30,
         blank=True,
         null=True,
         db_index=True,
@@ -50,18 +50,11 @@ class Transporter(BaseModel):
 class BulkTransport(BaseModel):
 
     title = models.CharField(
-            max_length=255,
+            max_length=100,
             db_index=True,
             blank=True,
             null=True,
         )
-    
-    unload_date = models.DateField(
-            null=True,
-            blank=True,
-        )
-    
-    
 
     class Meta:
         db_table = "bulk_transport"
@@ -82,6 +75,12 @@ class Transport(BaseModel):
         DELIVERY = "delivery", "Delivery"
         FINANCE = "finance", "Finance"
         PAID = "paid", "Paid"
+        DRAFT = "draft"
+
+    class QuantityUnit(models.TextChoices):
+        MT = "mt"
+        QUINTAL = "quintal"
+        KG = "kg"
 
     billing_firm = models.ForeignKey(
         BusinessClient,
@@ -90,8 +89,10 @@ class Transport(BaseModel):
     )
 
     bill_no = models.CharField(
-        max_length=10,
+        max_length=20,
         db_index=True,
+        null=True,
+        blank=True
     )
 
     bulk_transport = models.ForeignKey(
@@ -112,18 +113,29 @@ class Transport(BaseModel):
         BusinessClient,
         related_name="transports_from",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True
     )
 
     to_client = models.ForeignKey(
         BusinessClient,
         related_name="transports_to",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True
     )
 
     gross_wt = models.DecimalField(
         max_digits=15,
         decimal_places=3,
         default=0,
+    )
+
+    quantity_unit = models.CharField(
+        max_length=10,
+        choices=QuantityUnit.choices,
+        db_index=True,
+        default=QuantityUnit.QUINTAL,
     )
 
     bag_nos = models.DecimalField(
@@ -141,12 +153,16 @@ class Transport(BaseModel):
     vehicle_no = models.CharField(
         max_length=12,
         db_index=True,
+        blank=True,
+        null=True
     )
 
     transporter = models.ForeignKey(
         Transporter,
         related_name="transports",
         on_delete=models.PROTECT,
+        blank=True,
+        null=True
     )
 
     anugya = models.BooleanField(
@@ -195,7 +211,7 @@ class Transport(BaseModel):
     status = models.CharField(
         max_length=20,
         choices=TransportStatus.choices,
-        default=TransportStatus.PENDING,
+        default=TransportStatus.DRAFT,
         db_index=True,
     )
 
