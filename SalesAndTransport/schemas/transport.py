@@ -55,6 +55,7 @@ class TransportCreateSchema(Schema):
     adv_by_firm: Decimal = Decimal("0")
     final_paid: Decimal = Decimal("0")
     status: TransportStatus = "draft"
+    notes: Optional[str] = None
     items: list[TransportItemInputSchema]
 
     @field_validator("items", mode="before")
@@ -85,6 +86,7 @@ class TransportUpdateSchema(Schema):
     adv_by_firm: Optional[Decimal] = None
     final_paid: Optional[Decimal] = None
     status: Optional[TransportStatus] = None
+    notes: Optional[str] = None
     items: Optional[list[TransportItemInputSchema]] = None
 
     @field_validator("items", mode="before")
@@ -112,6 +114,7 @@ class TransportSearchSchema(Schema):
 
 class TransportItemOutSchema(Schema):
     id: int
+    order_id: Optional[int]
     order: Optional[str]
     quantity: Decimal
 
@@ -139,6 +142,7 @@ class TransportOutSchema(Schema):
     adv_by_firm: Decimal
     final_paid: Decimal
     status: str
+    notes: Optional[str]
     wt_rcpt_src: Optional[str]
     wt_rcpt_dst: Optional[str]
     items: list[TransportItemOutSchema]

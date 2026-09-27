@@ -9,7 +9,7 @@ from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.forms import ImageField
 from django.shortcuts import get_object_or_404
-from ninja import File, Form, Router
+from ninja import File, Form, Query, Router
 from ninja.files import UploadedFile
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
@@ -64,6 +64,7 @@ def transport_model_values(values: dict):
 def serialize_transport_item(item: TransportItems):
     return {
         "id": item.id,
+        "order_id": item.order_id,
         "order": item.order.order_no if item.order else None,
         "quantity": item.quantity,
     }
@@ -95,6 +96,7 @@ def serialize_transport(transport: Transport):
         "adv_by_firm": transport.adv_by_firm,
         "final_paid": transport.final_paid,
         "status": transport.status,
+        "notes": transport.notes,
         "wt_rcpt_src": transport.wt_rcpt_src,
         "wt_rcpt_dst": transport.wt_rcpt_dst,
         "items": [serialize_transport_item(item) for item in transport.items.all()],
@@ -129,7 +131,7 @@ def save_receipt(request, uploaded_file: UploadedFile | None, folder: str):
 
 
 def validate_items(items: list[TransportItemInputSchema], creating: bool):
-    if not items:
+    if creating and not items:
         raise ValueError("At least one transport item is required.")
     if creating and any(item.id is not None for item in items):
         raise ValueError("item id must not be provided when adding a transport.")
@@ -141,6 +143,7 @@ def apply_transport_fields(transport: Transport, values: dict):
 
 
 def save_items(transport: Transport, items: list[TransportItemInputSchema], user):
+    retained_item_ids = set()
     for item_data in items:
         values = item_data.model_dump(exclude_unset=True, exclude={"id"})
         order_id = values.pop("order")
@@ -148,12 +151,13 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
         item_id = item_data.id
 
         if item_id is None:
-            TransportItems.objects.create(
+            transport_item = TransportItems.objects.create(
                 transport=transport,
                 order=order,
                 quantity=values.get("quantity") or 0,
                 c_by=user,
             )
+            retained_item_ids.add(transport_item.id)
             continue
 
         transport_item = get_object_or_404(
@@ -167,6 +171,17 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
             transport_item.quantity = values["quantity"]
         transport_item.m_by = user
         transport_item.save()
+        retained_item_ids.add(transport_item.id)
+
+    TransportItems.objects.filter(
+        transport=transport,
+        is_active=True,
+    ).exclude(
+        id__in=retained_item_ids,
+    ).update(
+        is_active=False,
+        d_by=user,
+    )
 
 
 @router.post("/add", response={200: TransportDetailResponseSchema, 400: dict})
@@ -228,15 +243,16 @@ def update_transport(
         if dst_url is not None:
             values["wt_rcpt_dst"] = dst_url
 
-        apply_transport_fields(transport, values)
-        transport.m_by = request.auth
-        transport.full_clean()
-        transport.save()
+        with transaction.atomic():
+            apply_transport_fields(transport, values)
+            transport.m_by = request.auth
+            transport.full_clean()
+            transport.save()
 
-        if data.items is not None:
-            save_items(transport, data.items, request.auth)
+            if data.items is not None:
+                save_items(transport, data.items, request.auth)
 
-        transport = transport_queryset().get(id=transport.id)
+            transport = transport_queryset().get(id=transport.id)
         return {"success": True, "data": serialize_transport(transport)}
     except Exception as error:
         if settings.DEBUG:
@@ -245,7 +261,7 @@ def update_transport(
 
 
 @router.get("/get/", response={200: TransportDetailResponseSchema})
-def get_transport(request, data: TransportGetDeleteSchema):
+def get_transport(request, data: Query[TransportGetDeleteSchema]):
     transport = get_object_or_404(
         transport_queryset(),
         id=data.id,
