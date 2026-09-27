@@ -29,6 +29,7 @@ from SalesAndTransport.api.transport import (
     serialize_transport,
     transport_queryset,
     validate_items,
+    transport_model_values,
 )
 
 
@@ -91,8 +92,10 @@ def validate_bulk_create(data: BulkTransportCreateSchema):
 
 
 def create_child_transport(request, bulk_order, transport_data, index: int):
-    values = transport_data.model_dump(exclude_unset=True, exclude={"items"})
-    values["quantity_unit"] = values.pop("gross_wt_unit", "quintal")
+    values = transport_model_values(
+        transport_data.model_dump(exclude_unset=True, exclude={"items"})
+    )
+    values.setdefault("quantity_unit", "quintal")
     set_transport_receipts(request, values, index)
     transport = Transport(
         **values,

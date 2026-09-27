@@ -17,6 +17,17 @@ TransportStatus = Literal[
 QuantityUnit = Literal["mt", "quintal", "kg"]
 
 
+def parse_items_form_value(value):
+    if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+        value = value[0]
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as error:
+            raise ValueError("items must be a JSON-encoded list") from error
+    return value
+
+
 class TransportItemInputSchema(Schema):
     id: Optional[int] = None
     order: int
@@ -49,12 +60,7 @@ class TransportCreateSchema(Schema):
     @field_validator("items", mode="before")
     @classmethod
     def parse_items_form_value(cls, value):
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError as error:
-                raise ValueError("items must be a JSON-encoded list") from error
-        return value
+        return parse_items_form_value(value)
 
 
 class TransportUpdateSchema(Schema):
@@ -84,12 +90,7 @@ class TransportUpdateSchema(Schema):
     @field_validator("items", mode="before")
     @classmethod
     def parse_items_form_value(cls, value):
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError as error:
-                raise ValueError("items must be a JSON-encoded list") from error
-        return value
+        return parse_items_form_value(value)
 
 
 class TransportGetDeleteSchema(Schema):

@@ -18,6 +18,7 @@ from SalesAndTransport.models import (
     Order,
     Transport,
     TransportItems,
+    Transporter,
 )
 from SalesAndTransport.schemas.transport import (
     TransportCreateSchema,
@@ -35,6 +36,26 @@ from SalesAndTransport.schemas.transport import (
 
 router = Router(auth=OwnerAdminAuth())
 logger = logging.getLogger("ninja")
+
+
+TRANSPORT_FOREIGN_KEY_FIELDS = {
+    "billing_firm",
+    "commodity",
+    "from_client",
+    "to_client",
+    "transporter",
+}
+
+
+def transport_model_values(values: dict):
+    model_values = {}
+    for field, value in values.items():
+        if field == "gross_wt_unit":
+            field = "quantity_unit"
+        elif field in TRANSPORT_FOREIGN_KEY_FIELDS:
+            field = f"{field}_id"
+        model_values[field] = value
+    return model_values
 
 
 
@@ -115,9 +136,7 @@ def validate_items(items: list[TransportItemInputSchema], creating: bool):
 
 
 def apply_transport_fields(transport: Transport, values: dict):
-    for field, value in values.items():
-        if field == "gross_wt_unit":
-            field = "quantity_unit"
+    for field, value in transport_model_values(values).items():
         setattr(transport, field, value)
 
 
@@ -160,8 +179,10 @@ def add_transport(
 ):
     try:
         validate_items(data.items, creating=True)
-        values = data.model_dump(exclude_unset=True, exclude={"items"})
-        values["quantity_unit"] = values.pop("gross_wt_unit", "quintal")
+        values = transport_model_values(
+            data.model_dump(exclude_unset=True, exclude={"items"})
+        )
+        values.setdefault("quantity_unit", "quintal")
         src_url = save_receipt(request, wt_rcpt_src, "src_rcpt")
         dst_url = save_receipt(request, wt_rcpt_dst, "dst_rcpt")
         if src_url is not None:
@@ -223,7 +244,7 @@ def update_transport(
         return 400, {"success": False, "message": str(error)}
 
 
-@router.get("/get", response={200: TransportDetailResponseSchema})
+@router.get("/get/", response={200: TransportDetailResponseSchema})
 def get_transport(request, data: TransportGetDeleteSchema):
     transport = get_object_or_404(
         transport_queryset(),
@@ -233,7 +254,7 @@ def get_transport(request, data: TransportGetDeleteSchema):
     return {"success": True, "data": serialize_transport(transport)}
 
 
-@router.delete("/del", response={200: TransportDeleteResponseSchema})
+@router.delete("/del/", response={200: TransportDeleteResponseSchema})
 @transaction.atomic
 def delete_transport(request, data: TransportGetDeleteSchema):
     transport = get_object_or_404(Transport, id=data.id, is_active=True)
@@ -271,7 +292,7 @@ def list_transports(request, data: Form[TransportListSchema]):
     }
 
 
-@router.post("/search", response={200: TransportSearchResponseSchema})
+@router.post("/search/", response={200: TransportSearchResponseSchema})
 def search_transports(request, data: Form[TransportSearchSchema]):
     keyword = data.keyword.strip()
     queryset = transport_queryset().filter(is_active=True)
@@ -297,7 +318,7 @@ def select_client_firms(request):
     return {"success": True, "data": list(clients)}
 
 
-@router.get("/clients/locations/sel", response={200: dict})
+@router.get("/clients/locations/sel/", response={200: dict})
 def select_client_locations(request):
     clients = BusinessClient.objects.filter(
         is_active=True,
@@ -305,3 +326,49 @@ def select_client_locations(request):
         type=BusinessClient.ClientType.MY_FIRM,
     ).order_by("name", "id").values("id", "name", "type", "city")
     return {"success": True, "data": list(clients)}
+
+
+@router.get("/orders/sel/", response={200: dict})
+def select_transport_orders(request):
+    orders = Order.objects.filter(
+        is_active=True,
+        status__in=[Order.OrderStatus.PENDING, Order.OrderStatus.DRAFT],
+    ).select_related(
+        "commodity",
+        "from_client",
+        "to_client",
+    ).order_by("order_no", "id")
+
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": order.id,
+                "order_type": order.type,
+                "status": order.status,
+                "order_number": order.order_no,
+                "commodity": order.commodity.name,
+                "from_client": (
+                    order.from_client.name
+                    if order.type == Order.OrderType.PURCHASE_ORDER
+                    and order.from_client
+                    else None
+                ),
+                "to_client": (
+                    order.to_client.name
+                    if order.type == Order.OrderType.SALES_ORDER
+                    and order.to_client
+                    else None
+                ),
+            }
+            for order in orders
+        ],
+    }
+
+
+@router.get("/transporters/sel/", response={200: dict})
+def select_transporters(request):
+    transporters = Transporter.objects.filter(
+        is_active=True,
+    ).order_by("name", "id").values("id", "name", "agency", "city")
+    return {"success": True, "data": list(transporters)}
