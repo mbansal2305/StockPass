@@ -91,7 +91,7 @@ def current_user(request):
 # REFRESH TOKEN
 # ============================================================
 
-@router.post("/refresh/")
+@router.post("/refresh/", response={200: dict, 401: dict, 403: dict})
 def refresh_token(request, data: RefreshTokenSchema):
 
     try:
@@ -139,7 +139,7 @@ def refresh_token(request, data: RefreshTokenSchema):
 # LOGOUT
 # ============================================================
 
-@router.post("/logout/", auth=JWTAuth())
+@router.post("/logout/", auth=JWTAuth(), response={200: dict, 401: dict})
 def logout_user(request, data: LogoutSchema):
 
     try:

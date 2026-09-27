@@ -1,6 +1,8 @@
+import logging
 from pathlib import Path
 from uuid import uuid4
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from django.db import transaction
@@ -12,6 +14,7 @@ from ninja.files import UploadedFile
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import (
+    BusinessClient,
     Order,
     Transport,
     TransportItems,
@@ -31,6 +34,10 @@ from SalesAndTransport.schemas.transport import (
 
 
 router = Router(auth=OwnerAdminAuth())
+logger = logging.getLogger("ninja")
+
+
+
 
 
 def serialize_transport_item(item: TransportItems):
@@ -170,6 +177,8 @@ def add_transport(
 
         return {"success": True, "data": serialize_transport(transport)}
     except Exception as error:
+        if settings.DEBUG:
+            logger.exception("Transport request failed")
         return 400, {"success": False, "message": str(error)}
 
 
@@ -209,6 +218,8 @@ def update_transport(
         transport = transport_queryset().get(id=transport.id)
         return {"success": True, "data": serialize_transport(transport)}
     except Exception as error:
+        if settings.DEBUG:
+            logger.exception("Transport request failed")
         return 400, {"success": False, "message": str(error)}
 
 
@@ -274,3 +285,23 @@ def search_transports(request, data: Form[TransportSearchSchema]):
         "total": queryset.count(),
         "results": [serialize_transport(transport) for transport in queryset],
     }
+
+
+
+@router.get("/clients/firms/sel/", response={200: dict})
+def select_client_firms(request):
+    clients = BusinessClient.objects.filter(
+        is_active=True,
+        type=BusinessClient.ClientType.MY_FIRM,
+    ).order_by("name", "id").values("id", "name", "type", "city")
+    return {"success": True, "data": list(clients)}
+
+
+@router.get("/clients/locations/sel", response={200: dict})
+def select_client_locations(request):
+    clients = BusinessClient.objects.filter(
+        is_active=True,
+    ).exclude(
+        type=BusinessClient.ClientType.MY_FIRM,
+    ).order_by("name", "id").values("id", "name", "type", "city")
+    return {"success": True, "data": list(clients)}

@@ -1,11 +1,13 @@
+import logging
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja import Router
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
-from SalesAndTransport.models import Order
+from SalesAndTransport.models import BusinessClient, Order
 from SalesAndTransport.schemas.order import (
     OrderCreateSchema,
     OrderListSchema,
@@ -16,6 +18,7 @@ from SalesAndTransport.schemas.order import (
 
 
 router = Router(auth=OwnerAdminAuth())
+logger = logging.getLogger("ninja")
 
 def serialize_order(order: Order):
     return {
@@ -100,12 +103,50 @@ def active_orders(filters: dict[str, Any]):
     )
 
 
-@router.post("/add/")
+def client_selection(client_type: str):
+    return list(
+        BusinessClient.objects.filter(
+            is_active=True,
+            type=client_type,
+        )
+        .order_by("name", "id")
+        .values("id", "name", "type", "city")
+    )
+
+
+@router.get("/so/clients/sel/", response={200: dict})
+def select_sales_order_clients(request):
+    return {
+        "success": True,
+        "data": {
+            "from_client": client_selection(BusinessClient.ClientType.MY_FIRM),
+            "to_client": client_selection(BusinessClient.ClientType.COMPANY),
+        },
+    }
+
+
+@router.get("/po/clients/sel/", response={200: dict})
+def select_purchase_order_clients(request):
+    return {
+        "success": True,
+        "data": {
+            "from_client": client_selection(BusinessClient.ClientType.COMPANY),
+            "to_client": client_selection(BusinessClient.ClientType.MY_FIRM),
+        },
+    }
+
+
+@router.post("/add/", response={200: dict, 400: dict})
 @transaction.atomic
 def add_order(request, data: OrderCreateSchema):
     try:
+        order_data = data.model_dump(exclude_unset=True)
+        for field in ("from_client", "to_client", "commodity", "broker"):
+            if field in order_data:
+                order_data[f"{field}_id"] = order_data.pop(field)
+
         order = Order(
-            **data.model_dump(exclude_unset=True),
+            **order_data,
             c_by=request.auth,
         )
         order.full_clean()
@@ -117,10 +158,12 @@ def add_order(request, data: OrderCreateSchema):
             "data": serialize_order(order),
         }
     except Exception as error:
+        if settings.DEBUG:
+            logger.exception("Order request failed")
         return 400, {"success": False, "message": str(error)}
 
 
-@router.patch("/upd/")
+@router.patch("/upd/", response={200: dict, 400: dict})
 @transaction.atomic
 def update_order(request, data: OrderUpdateSchema):
     try:
@@ -130,6 +173,8 @@ def update_order(request, data: OrderUpdateSchema):
             exclude_unset=True,
             exclude={"id"},
         ).items():
+            if field in {"from_client", "to_client", "commodity", "broker"}:
+                field = f"{field}_id"
             setattr(order, field, value)
 
         order.m_by = request.auth
@@ -142,6 +187,8 @@ def update_order(request, data: OrderUpdateSchema):
             "data": serialize_order(order),
         }
     except Exception as error:
+        if settings.DEBUG:
+            logger.exception("Order request failed")
         return 400, {"success": False, "message": str(error)}
 
 
@@ -178,7 +225,7 @@ def delete_order(request, data: OrderGetDeleteSchema):
     }
 
 
-@router.post("/lst/")
+@router.post("/lst/", response={200: dict, 400: dict})
 def list_orders(request, data: OrderListSchema):
     try:
         queryset = active_orders(get_filters(data)).order_by("id")
@@ -195,7 +242,7 @@ def list_orders(request, data: OrderListSchema):
         return 400, {"success": False, "message": str(error)}
 
 
-@router.post("/sel/")
+@router.post("/sel/", response={200: dict, 400: dict})
 def select_orders(request, data: OrderSelectSchema):
     try:
         queryset = active_orders(get_filters(data)).order_by("order_no", "id")
@@ -208,3 +255,6 @@ def select_orders(request, data: OrderSelectSchema):
         }
     except ValueError as error:
         return 400, {"success": False, "message": str(error)}
+
+
+

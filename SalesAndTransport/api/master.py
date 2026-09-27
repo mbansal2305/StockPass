@@ -1,5 +1,7 @@
+import logging
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.forms.models import model_to_dict
 from django.shortcuts import get_object_or_404
@@ -23,6 +25,7 @@ from SalesAndTransport.schemas.master import (
 
 
 router = Router(auth=OwnerAdminAuth())
+logger = logging.getLogger("ninja")
 
 
 # =========================================================
@@ -202,7 +205,7 @@ def paginate_queryset(queryset, page: int, page_size: int):
 # ADD
 # =========================================================
 
-@router.post("/add/")
+@router.post("/add/", response={200: dict, 400: dict})
 @transaction.atomic
 def add_entity(request, data: MasterAddUpdateSchema):
 
@@ -242,6 +245,8 @@ def add_entity(request, data: MasterAddUpdateSchema):
         }
 
     except Exception as e:
+        if settings.DEBUG:
+            logger.exception("Master entity request failed")
         return 400, {
             "success": False,
             "message": str(e),
@@ -252,7 +257,7 @@ def add_entity(request, data: MasterAddUpdateSchema):
 # UPDATE
 # =========================================================
 
-@router.patch("/upd/")
+@router.patch("/upd/", response={200: dict, 400: dict})
 @transaction.atomic
 def update_entity(request, data: MasterAddUpdateSchema):
 
@@ -299,6 +304,8 @@ def update_entity(request, data: MasterAddUpdateSchema):
         }
 
     except Exception as e:
+        if settings.DEBUG:
+            logger.exception("Master entity request failed")
         return 400, {
             "success": False,
             "message": str(e),
@@ -309,7 +316,7 @@ def update_entity(request, data: MasterAddUpdateSchema):
 # GET
 # =========================================================
 
-@router.get("/get/")
+@router.get("/get/", response={200: dict, 400: dict})
 def get_entity(request, data: MasterGetDeleteSchema):
 
     try:
@@ -339,7 +346,7 @@ def get_entity(request, data: MasterGetDeleteSchema):
 # DELETE
 # =========================================================
 
-@router.delete("/del/")
+@router.delete("/del/", response={200: dict, 400: dict})
 @transaction.atomic
 def delete_entity(request, data: MasterGetDeleteSchema):
 
@@ -381,7 +388,7 @@ def delete_entity(request, data: MasterGetDeleteSchema):
 # LIST
 # =========================================================
 
-@router.post("/lst/")
+@router.post("/lst/", response={200: dict, 400: dict})
 def list_entities(request, data: MasterListSchema):
 
     try:
@@ -423,7 +430,7 @@ def list_entities(request, data: MasterListSchema):
 # SELECT
 # =========================================================
 
-@router.post("/sel/")
+@router.post("/sel/", response={200: dict, 400: dict})
 def select_entities(request, data: MasterSelectSchema):
 
     try:
@@ -460,7 +467,7 @@ def select_entities(request, data: MasterSelectSchema):
 # SEARCH
 # =========================================================
 
-@router.post("/search/")
+@router.post("/search/", response={200: dict, 400: dict})
 def search_entities(request, data: MasterSearchSchema):
 
     try:

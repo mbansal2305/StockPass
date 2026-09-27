@@ -45,7 +45,7 @@ def get_user(request, user_id: int):
     return user
 
 # CREATE USER
-@router.post("/", response=UserOutSchema)
+@router.post("/", response={200: UserOutSchema, 400: dict})
 def create_user(request, data: UserCreateSchema):
     """
     Create a new user.
@@ -140,7 +140,7 @@ def update_user(
 
 
 # TOGGLE USER STATUS
-@router.patch("/{user_id}/toggle/")
+@router.patch("/{user_id}/toggle/", response={200: dict, 400: dict})
 def toggle_user_status(request, user_id: int):
     """
     Toggle a user's active status.
@@ -199,7 +199,7 @@ def change_user_password(
 
 
 # DELETE USER
-@router.delete("/{user_id}/")
+@router.delete("/{user_id}/", response={200: dict, 400: dict})
 def delete_user(request, user_id: int):
     """
     Soft-delete a user.

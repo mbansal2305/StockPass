@@ -52,8 +52,7 @@ class BulkTransport(BaseModel):
     title = models.CharField(
             max_length=100,
             db_index=True,
-            blank=True,
-            null=True,
+            default="Bulk Transport",
         )
 
     class Meta:
