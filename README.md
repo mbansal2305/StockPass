@@ -8,9 +8,9 @@ Inventory and Transport Management WebAPP for businesses.
 
 .\.venv\Scripts\activate
 
-# Run the Development Server with HTTPS
+# Run the Development Server with HTTPS 
 
-uvicorn StockPass.asgi:application --host  0.0.0.0  --port  8000 --reload
+uvicorn StockPass.asgi:application --host 0.0.0.0 --port 8000 --reload
 
 # db migration
 
