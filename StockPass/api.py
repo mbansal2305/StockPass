@@ -7,6 +7,7 @@ from ninja.errors import HttpError, ValidationError
 
 from StockPassCore.api.auth import router as auth_router
 from StockPassCore.api.users import router as users_router
+from SalesAndTransport.api.godown import router as godown_router
 from SalesAndTransport.api.master import router as master_router
 from SalesAndTransport.api.order import router as order_router
 from SalesAndTransport.api.transport import router as transport_router
@@ -50,6 +51,7 @@ def handle_api_exception(request, exc):
 
 api.add_router("/auth/", auth_router)
 api.add_router("/users/", users_router)
+api.add_router("/godown-transactions/", godown_router)
 api.add_router("/master/", master_router)
 api.add_router("/orders/", order_router)
 api.add_router("/transports/", transport_router)

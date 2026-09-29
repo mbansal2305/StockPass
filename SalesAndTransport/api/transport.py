@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from ninja.files import UploadedFile
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import (
     BusinessClient,
+    GodownTransaction,
     Order,
     Transport,
     TransportItems,
@@ -184,6 +186,110 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
     )
 
 
+def transport_quantity_in_quintals(transport: Transport) -> Decimal:
+    quantity = transport.gross_wt
+    if transport.quantity_unit == Transport.QuantityUnit.MT:
+        quantity *= Decimal("10")
+    elif transport.quantity_unit == Transport.QuantityUnit.KG:
+        quantity /= Decimal("100")
+    return quantity.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+
+
+def sync_godown_transactions(
+    transport: Transport,
+    user,
+    reverse_existing=False,
+    record_current=True,
+):
+    if reverse_existing:
+        transactions_to_reverse = GodownTransaction.objects.filter(
+            transport=transport,
+            transaction_type__in=[
+                GodownTransaction.TransactionType.ENTRY,
+                GodownTransaction.TransactionType.EXIT,
+            ],
+            reversals__isnull=True,
+        ).select_related("godown", "commodity")
+
+        for original in transactions_to_reverse:
+            create_godown_transaction(
+                transport=transport,
+                godown=original.godown,
+                commodity=original.commodity,
+                quantity=original.quantity,
+                transaction_type=GodownTransaction.TransactionType.REVERSAL,
+                user=user,
+                reversal_of=original,
+            )
+
+    if record_current:
+        quantity = transport_quantity_in_quintals(transport)
+        if transport.from_client_id:
+            from_client = transport.from_client
+            if from_client.type == BusinessClient.ClientType.MY_GODOWN:
+                create_godown_transaction(
+                    transport=transport,
+                    godown=from_client,
+                    commodity=transport.commodity,
+                    quantity=quantity,
+                    transaction_type=GodownTransaction.TransactionType.EXIT,
+                    user=user,
+                )
+
+        if transport.to_client_id:
+            to_client = transport.to_client
+            if to_client.type == BusinessClient.ClientType.MY_GODOWN:
+                create_godown_transaction(
+                    transport=transport,
+                    godown=to_client,
+                    commodity=transport.commodity,
+                    quantity=quantity,
+                    transaction_type=GodownTransaction.TransactionType.ENTRY,
+                    user=user,
+                )
+
+
+def create_godown_transaction(
+    transport: Transport,
+    godown: BusinessClient,
+    commodity,
+    quantity: Decimal,
+    transaction_type: str,
+    user,
+    reversal_of: GodownTransaction | None = None,
+):
+    BusinessClient.objects.select_for_update().get(pk=godown.pk)
+    latest_transaction = GodownTransaction.objects.filter(
+        godown=godown,
+        commodity=commodity,
+    ).order_by("-id").first()
+    balance = latest_transaction.remaining_quantity if latest_transaction else Decimal("0")
+
+    if reversal_of is not None:
+        balance_change = (
+            -quantity
+            if reversal_of.transaction_type == GodownTransaction.TransactionType.ENTRY
+            else quantity
+        )
+    else:
+        balance_change = (
+            quantity
+            if transaction_type == GodownTransaction.TransactionType.ENTRY
+            else -quantity
+        )
+
+    GodownTransaction.objects.create(
+        transport=transport,
+        godown=godown,
+        commodity=commodity,
+        quantity=quantity,
+        remaining_quantity=balance + balance_change,
+        transaction_type=transaction_type,
+        reversal_of=reversal_of,
+        c_by=user,
+    )
+
+
 @router.post("/add", response={200: TransportDetailResponseSchema, 400: dict})
 @transaction.atomic
 def add_transport(
@@ -208,8 +314,10 @@ def add_transport(
         transport = Transport(**values, c_by=request.auth)
         transport.bulk_transport = None
         transport.full_clean()
-        transport.save()
-        save_items(transport, data.items, request.auth)
+        with transaction.atomic():
+            transport.save()
+            save_items(transport, data.items, request.auth)
+            sync_godown_transactions(transport, request.auth)
 
         return {"success": True, "data": serialize_transport(transport)}
     except Exception as error:
@@ -236,6 +344,10 @@ def update_transport(
             validate_items(data.items, creating=False)
 
         values = data.model_dump(exclude_unset=True, exclude={"id", "items"})
+        update_godown_ledger = bool(
+            {"commodity", "from_client", "to_client", "gross_wt", "gross_wt_unit"}
+            & values.keys()
+        )
         src_url = save_receipt(request, wt_rcpt_src, "src_rcpt")
         dst_url = save_receipt(request, wt_rcpt_dst, "dst_rcpt")
         if src_url is not None:
@@ -244,6 +356,8 @@ def update_transport(
             values["wt_rcpt_dst"] = dst_url
 
         with transaction.atomic():
+            if update_godown_ledger:
+                sync_godown_transactions(transport, request.auth, reverse_existing=True)
             apply_transport_fields(transport, values)
             transport.m_by = request.auth
             transport.full_clean()
@@ -251,6 +365,9 @@ def update_transport(
 
             if data.items is not None:
                 save_items(transport, data.items, request.auth)
+
+            if update_godown_ledger:
+                sync_godown_transactions(transport, request.auth)
 
             transport = transport_queryset().get(id=transport.id)
         return {"success": True, "data": serialize_transport(transport)}
@@ -274,6 +391,12 @@ def get_transport(request, data: Query[TransportGetDeleteSchema]):
 @transaction.atomic
 def delete_transport(request, data: TransportGetDeleteSchema):
     transport = get_object_or_404(Transport, id=data.id, is_active=True)
+    sync_godown_transactions(
+        transport,
+        request.auth,
+        reverse_existing=True,
+        record_current=False,
+    )
     transport.is_active = False
     transport.d_by = request.auth
     transport.save(update_fields=["is_active", "d_by"])
