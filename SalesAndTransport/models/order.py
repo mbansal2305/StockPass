@@ -135,3 +135,14 @@ class Order(BaseModel):
 
     def __str__(self):
         return self.order_no
+
+
+class PurchaseOrderSequence(models.Model):
+    year = models.PositiveIntegerField(unique=True)
+    next_serial = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        db_table = "purchase_order_sequence"
+
+    def __str__(self):
+        return f"PO-{self.year}-{self.next_serial:03d}"

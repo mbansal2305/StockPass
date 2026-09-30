@@ -357,7 +357,12 @@ def update_transport(
 
         with transaction.atomic():
             if update_godown_ledger:
-                sync_godown_transactions(transport, request.auth, reverse_existing=True)
+                sync_godown_transactions(
+                    transport,
+                    request.auth,
+                    reverse_existing=True,
+                    record_current=False,
+                )
             apply_transport_fields(transport, values)
             transport.m_by = request.auth
             transport.full_clean()

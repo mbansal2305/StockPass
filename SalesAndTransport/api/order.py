@@ -4,10 +4,11 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ninja import Router
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
-from SalesAndTransport.models import BusinessClient, Order
+from SalesAndTransport.models import BusinessClient, Order, PurchaseOrderSequence
 from SalesAndTransport.schemas.order import (
     OrderCreateSchema,
     OrderListSchema,
@@ -114,6 +115,57 @@ def client_selection(client_type: str):
     )
 
 
+def highest_purchase_order_serial(year: int) -> int:
+    prefix = f"PO-{year}-"
+    order_numbers = Order.objects.filter(
+        type=Order.OrderType.PURCHASE_ORDER,
+        order_no__startswith=prefix,
+    ).values_list("order_no", flat=True)
+    serials = [
+        int(suffix)
+        for order_number in order_numbers
+        if (suffix := order_number[len(prefix):]).isdigit()
+    ]
+    return max(serials, default=0)
+
+
+def next_purchase_order_serial(year: int, starting_serial: int) -> int:
+    prefix = f"PO-{year}-"
+    serial = max(starting_serial, highest_purchase_order_serial(year) + 1)
+    while Order.objects.filter(
+        type=Order.OrderType.PURCHASE_ORDER,
+        order_no=f"{prefix}{serial:04d}",
+    ).exists():
+        serial += 1
+    return serial
+
+
+def allocate_purchase_order_number() -> str:
+    year = timezone.localdate().year
+    sequence, _ = PurchaseOrderSequence.objects.get_or_create(
+        year=year,
+        defaults={"next_serial": highest_purchase_order_serial(year) + 1},
+    )
+    sequence = PurchaseOrderSequence.objects.select_for_update().get(year=year)
+    serial = next_purchase_order_serial(year, sequence.next_serial)
+    sequence.next_serial = serial + 1
+    sequence.save(update_fields=["next_serial"])
+    return f"PO-{year}-{serial:04d}"
+
+
+@router.get("/ordernum/po/", response={200: dict})
+def generate_purchase_order_number(request):
+    year = timezone.localdate().year
+    sequence = PurchaseOrderSequence.objects.filter(year=year).first()
+    starting_serial = sequence.next_serial if sequence else 1
+    serial = next_purchase_order_serial(year, starting_serial)
+
+    return {
+        "success": True,
+        "data": {"order_no": f"PO-{year}-{serial:04d}"},
+    }
+
+
 @router.get("/so/clients/sel/", response={200: dict})
 def select_sales_order_clients(request):
     return {
@@ -141,6 +193,9 @@ def select_purchase_order_clients(request):
 def add_order(request, data: OrderCreateSchema):
     try:
         order_data = data.model_dump(exclude_unset=True)
+        if order_data.get("type") == Order.OrderType.PURCHASE_ORDER:
+            order_data["order_no"] = allocate_purchase_order_number()
+
         for field in ("from_client", "to_client", "commodity", "broker"):
             if field in order_data:
                 order_data[f"{field}_id"] = order_data.pop(field)
