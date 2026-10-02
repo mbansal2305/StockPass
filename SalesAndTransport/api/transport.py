@@ -93,6 +93,7 @@ def serialize_transport(transport: Transport):
         "gatepass": transport.gatepass,
         "unload_date": transport.unload_date,
         "rcvd_wt": transport.rcvd_wt,
+        "rent_type": transport.rent_type,
         "rent": transport.rent,
         "adv_by_client": transport.adv_by_client,
         "adv_by_firm": transport.adv_by_firm,
@@ -304,6 +305,7 @@ def add_transport(
             data.model_dump(exclude_unset=True, exclude={"items"})
         )
         values.setdefault("quantity_unit", "quintal")
+        values.setdefault("rent_type", Transport.RentType.PER_UNIT)
         src_url = save_receipt(request, wt_rcpt_src, "src_rcpt")
         dst_url = save_receipt(request, wt_rcpt_dst, "dst_rcpt")
         if src_url is not None:
@@ -472,11 +474,11 @@ def select_client_locations(request):
     return {"success": True, "data": list(clients)}
 
 
-@router.get("/orders/sel/", response={200: dict})
-def select_transport_orders(request):
+def select_transport_orders(order_type):
     orders = Order.objects.filter(
         is_active=True,
         status__in=[Order.OrderStatus.PENDING, Order.OrderStatus.DRAFT],
+        type=order_type,
     ).select_related(
         "commodity",
         "from_client",
@@ -508,6 +510,16 @@ def select_transport_orders(request):
             for order in orders
         ],
     }
+
+
+@router.get("/orders/po/sel/", response={200: dict})
+def select_purchase_orders(request):
+    return select_transport_orders(Order.OrderType.PURCHASE_ORDER)
+
+
+@router.get("/orders/so/sel/", response={200: dict})
+def select_sales_orders(request):
+    return select_transport_orders(Order.OrderType.SALES_ORDER)
 
 
 @router.get("/transporters/sel/", response={200: dict})

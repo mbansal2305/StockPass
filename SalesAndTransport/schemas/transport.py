@@ -15,6 +15,7 @@ TransportStatus = Literal[
     "draft",
 ]
 QuantityUnit = Literal["mt", "quintal", "kg"]
+RentType = Literal["fix", "per_unit"]
 
 
 def parse_items_form_value(value):
@@ -50,6 +51,7 @@ class TransportCreateSchema(Schema):
     gatepass: bool = False
     unload_date: Optional[date] = None
     rcvd_wt: Decimal = Decimal("0")
+    rent_type: Optional[RentType] = None
     rent: Decimal = Decimal("0")
     adv_by_client: Decimal = Decimal("0")
     adv_by_firm: Decimal = Decimal("0")
@@ -81,6 +83,7 @@ class TransportUpdateSchema(Schema):
     gatepass: Optional[bool] = None
     unload_date: Optional[date] = None
     rcvd_wt: Optional[Decimal] = None
+    rent_type: Optional[RentType] = None
     rent: Optional[Decimal] = None
     adv_by_client: Optional[Decimal] = None
     adv_by_firm: Optional[Decimal] = None
@@ -137,6 +140,7 @@ class TransportOutSchema(Schema):
     gatepass: bool
     unload_date: Optional[date]
     rcvd_wt: Decimal
+    rent_type: str
     rent: Decimal
     adv_by_client: Decimal
     adv_by_firm: Decimal

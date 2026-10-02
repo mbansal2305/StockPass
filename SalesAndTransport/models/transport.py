@@ -81,6 +81,10 @@ class Transport(BaseModel):
         QUINTAL = "quintal"
         KG = "kg"
 
+    class RentType(models.TextChoices):
+        FIX = "fix", "Fix"
+        PER_UNIT = "per_unit", "Per Unit"
+
     billing_firm = models.ForeignKey(
         BusinessClient,
         related_name="transports_billed",
@@ -181,6 +185,13 @@ class Transport(BaseModel):
         max_digits=15,
         decimal_places=3,
         default=0,
+    )
+
+    rent_type = models.CharField(
+        max_length=20,
+        choices=RentType.choices,
+        default=RentType.PER_UNIT,
+        db_index=True,
     )
 
     rent = models.DecimalField(
