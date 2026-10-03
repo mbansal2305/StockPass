@@ -69,6 +69,7 @@ def serialize_transport_item(item: TransportItems):
         "order_id": item.order_id,
         "order": item.order.order_no if item.order else None,
         "quantity": item.quantity,
+        "order_entry": item.order_quantity,
     }
 
 
@@ -81,6 +82,8 @@ def serialize_transport(transport: Transport):
             transport.bulk_transport.title if transport.bulk_transport else None
         ),
         "commodity": transport.commodity.name,
+        "commodity_type": transport.commodity.type,
+        "loading_date" : transport.loading_date,
         "from_client": transport.from_client.name if transport.from_client else None,
         "to_client": transport.to_client.name if transport.to_client else None,
         "gross_wt": transport.gross_wt,
@@ -97,7 +100,9 @@ def serialize_transport(transport: Transport):
         "rent": transport.rent,
         "adv_by_client": transport.adv_by_client,
         "adv_by_firm": transport.adv_by_firm,
-        "final_paid": transport.final_paid,
+        "final_paid" : transport.final_paid,
+        "extra_paid": transport.extra_paid,
+        "shortage" : transport.shortage,
         "status": transport.status,
         "notes": transport.notes,
         "wt_rcpt_src": transport.wt_rcpt_src,
@@ -146,6 +151,7 @@ def apply_transport_fields(transport: Transport, values: dict):
 
 
 def save_items(transport: Transport, items: list[TransportItemInputSchema], user):
+    affected_order_ids = active_order_ids_for_transports([transport.id])
     retained_item_ids = set()
     for item_data in items:
         values = item_data.model_dump(exclude_unset=True, exclude={"id"})
@@ -158,6 +164,7 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
                 transport=transport,
                 order=order,
                 quantity=values.get("quantity") or 0,
+                order_quantity=values.get("order_entry") or 0,
                 c_by=user,
             )
             retained_item_ids.add(transport_item.id)
@@ -172,6 +179,9 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
         transport_item.order = order
         if "quantity" in values and values["quantity"] is not None:
             transport_item.quantity = values["quantity"]
+
+        if "order_entry" in values and values["order_entry"] is not None:
+            transport_item.order_quantity = values["order_entry"]
         transport_item.m_by = user
         transport_item.save()
         retained_item_ids.add(transport_item.id)
@@ -186,14 +196,92 @@ def save_items(transport: Transport, items: list[TransportItemInputSchema], user
         d_by=user,
     )
 
+    affected_order_ids.update(active_order_ids_for_transports([transport.id]))
+    recalculate_order_fulfillment(affected_order_ids, user)
+
+
+def quantity_in_quintals(quantity: Decimal, unit: str) -> Decimal:
+    if unit == "mt":
+        return quantity * Decimal("10")
+    if unit == "kg":
+        return quantity / Decimal("100")
+    if unit == "quintal":
+        return quantity
+    raise ValueError(f"Unsupported quantity unit: {unit}")
+
+
+def active_order_ids_for_transports(transport_ids: list[int]) -> set[int]:
+    return set(
+        TransportItems.objects.filter(
+            transport_id__in=transport_ids,
+            transport__is_active=True,
+            is_active=True,
+        )
+        .exclude(order_id__isnull=True)
+        .values_list("order_id", flat=True)
+        .distinct()
+    )
+
+
+def recalculate_transport_order_fulfillment(
+    transport_ids: list[int],
+    user=None,
+):
+    recalculate_order_fulfillment(
+        active_order_ids_for_transports(transport_ids),
+        user,
+    )
+
+
+def recalculate_order_fulfillment(order_ids: set[int], user=None):
+    if not order_ids:
+        return
+
+    orders = list(
+        Order.objects.select_for_update()
+        .filter(id__in=order_ids)
+        .order_by("id")
+    )
+    if not orders:
+        return
+
+    fulfilled_in_quintals = {order.id: Decimal("0") for order in orders}
+    for item in TransportItems.objects.filter(
+        order_id__in=fulfilled_in_quintals,
+        transport__is_active=True,
+        is_active=True,
+    ).select_related("transport"):
+        fulfilled_in_quintals[item.order_id] += quantity_in_quintals(
+            item.order_quantity,
+            item.transport.quantity_unit,
+        )
+
+    unit_factors = {
+        Order.QuantityUnit.MT: Decimal("10"),
+        Order.QuantityUnit.QUINTAL: Decimal("1"),
+        Order.QuantityUnit.KG: Decimal("0.01"),
+    }
+    for order in orders:
+        if order.quantity_unit not in unit_factors:
+            raise ValueError(f"Unsupported order quantity unit: {order.quantity_unit}")
+        fulfilled = (
+            fulfilled_in_quintals[order.id] / unit_factors[order.quantity_unit]
+        ).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+        if order.quantity_fulfilled == fulfilled:
+            continue
+        order.quantity_fulfilled = fulfilled
+        update_fields = ["quantity_fulfilled", "m_at"]
+        if user is not None:
+            order.m_by = user
+            update_fields.append("m_by")
+        order.save(update_fields=update_fields)
+
 
 def transport_quantity_in_quintals(transport: Transport) -> Decimal:
-    quantity = transport.gross_wt
-    if transport.quantity_unit == Transport.QuantityUnit.MT:
-        quantity *= Decimal("10")
-    elif transport.quantity_unit == Transport.QuantityUnit.KG:
-        quantity /= Decimal("100")
-    return quantity.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    return quantity_in_quintals(
+        transport.gross_wt,
+        transport.quantity_unit,
+    ).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
 
 def sync_godown_transactions(
@@ -372,6 +460,11 @@ def update_transport(
 
             if data.items is not None:
                 save_items(transport, data.items, request.auth)
+            else:
+                recalculate_transport_order_fulfillment(
+                    [transport.id],
+                    request.auth,
+                )
 
             if update_godown_ledger:
                 sync_godown_transactions(transport, request.auth)
@@ -398,6 +491,7 @@ def get_transport(request, data: Query[TransportGetDeleteSchema]):
 @transaction.atomic
 def delete_transport(request, data: TransportGetDeleteSchema):
     transport = get_object_or_404(Transport, id=data.id, is_active=True)
+    affected_order_ids = active_order_ids_for_transports([transport.id])
     sync_godown_transactions(
         transport,
         request.auth,
@@ -407,6 +501,7 @@ def delete_transport(request, data: TransportGetDeleteSchema):
     transport.is_active = False
     transport.d_by = request.auth
     transport.save(update_fields=["is_active", "d_by"])
+    recalculate_order_fulfillment(affected_order_ids, request.auth)
     return {"success": True, "id": transport.id}
 
 
@@ -494,6 +589,10 @@ def select_transport_orders(order_type):
                 "status": order.status,
                 "order_number": order.order_no,
                 "commodity": order.commodity.name,
+                "commodity_type" : order.commodity.type,
+                "commodity_id" : order.commodity.id,
+                "rem_qty" : (order.quantity - order.quantity_fulfilled),
+                "rem_qty_unit" : order.quantity_unit,
                 "from_client": (
                     order.from_client.name
                     if order.type == Order.OrderType.PURCHASE_ORDER

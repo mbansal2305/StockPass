@@ -4,3 +4,5 @@ from .commodity import *
 from .godowns import *
 from .order import *
 from .transport import *
+from .labours import *
+from .tempos import *

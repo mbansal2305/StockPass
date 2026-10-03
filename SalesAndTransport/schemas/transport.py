@@ -33,6 +33,7 @@ class TransportItemInputSchema(Schema):
     id: Optional[int] = None
     order: int
     quantity: Optional[Decimal] = None
+    order_entry: Optional[Decimal] = None
 
 
 class TransportCreateSchema(Schema):
@@ -49,6 +50,7 @@ class TransportCreateSchema(Schema):
     transporter: Optional[int] = None
     anugya: bool = False
     gatepass: bool = False
+    loading_date: Optional[date] = None
     unload_date: Optional[date] = None
     rcvd_wt: Decimal = Decimal("0")
     rent_type: Optional[RentType] = None
@@ -56,6 +58,8 @@ class TransportCreateSchema(Schema):
     adv_by_client: Decimal = Decimal("0")
     adv_by_firm: Decimal = Decimal("0")
     final_paid: Decimal = Decimal("0")
+    extra_paid: Decimal = Decimal("0")
+    shortage : Optional[Decimal] = Decimal("0")
     status: TransportStatus = "draft"
     notes: Optional[str] = None
     items: list[TransportItemInputSchema]
@@ -81,6 +85,7 @@ class TransportUpdateSchema(Schema):
     transporter: Optional[int] = None
     anugya: Optional[bool] = None
     gatepass: Optional[bool] = None
+    loading_date: Optional[date] = None
     unload_date: Optional[date] = None
     rcvd_wt: Optional[Decimal] = None
     rent_type: Optional[RentType] = None
@@ -88,6 +93,8 @@ class TransportUpdateSchema(Schema):
     adv_by_client: Optional[Decimal] = None
     adv_by_firm: Optional[Decimal] = None
     final_paid: Optional[Decimal] = None
+    extra_paid: Optional[Decimal] = None
+    shortage : Optional[Decimal] = None
     status: Optional[TransportStatus] = None
     notes: Optional[str] = None
     items: Optional[list[TransportItemInputSchema]] = None
@@ -120,6 +127,7 @@ class TransportItemOutSchema(Schema):
     order_id: Optional[int]
     order: Optional[str]
     quantity: Decimal
+    order_entry: Decimal
 
 
 class TransportOutSchema(Schema):
@@ -128,6 +136,8 @@ class TransportOutSchema(Schema):
     bill_no: Optional[str]
     bulk_transport: Optional[str]
     commodity: str
+    commodity_type : Optional[str]
+    loading_date: Optional[date]
     from_client: Optional[str]
     to_client: Optional[str]
     gross_wt: Decimal
@@ -145,6 +155,7 @@ class TransportOutSchema(Schema):
     adv_by_client: Decimal
     adv_by_firm: Decimal
     final_paid: Decimal
+    extra_paid: Decimal
     status: str
     notes: Optional[str]
     wt_rcpt_src: Optional[str]

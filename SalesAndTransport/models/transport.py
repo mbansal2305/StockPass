@@ -176,6 +176,11 @@ class Transport(BaseModel):
         default=False,
     )
 
+    loading_date = models.DateField(
+            null=True,
+            blank=True,
+        )
+
     unload_date = models.DateField(
         null=True,
         blank=True,
@@ -218,12 +223,25 @@ class Transport(BaseModel):
         default=0,
     )
 
+    shortage = models.DecimalField(
+            max_digits=15,
+            decimal_places=2,
+            default=0,
+        )
+
+    extra_paid = models.DecimalField(
+            max_digits=15,
+            decimal_places=2,
+            default=0,
+        )
+
     status = models.CharField(
         max_length=20,
         choices=TransportStatus.choices,
         default=TransportStatus.DRAFT,
         db_index=True,
     )
+
 
     wt_rcpt_src = models.URLField(
         max_length=500,
@@ -274,6 +292,12 @@ class TransportItems(BaseModel):
     )
 
     quantity = models.DecimalField(
+        max_digits=15,
+        decimal_places=3,
+        default=0,
+    )
+
+    order_quantity = models.DecimalField(
         max_digits=15,
         decimal_places=3,
         default=0,

@@ -7,6 +7,8 @@ EntityType = Literal[
     "broker",
     "businessclient",
     "commodity",
+    "labour",
+    "tempo",
     "transporter",
 ]
 

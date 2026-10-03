@@ -12,6 +12,8 @@ from SalesAndTransport.models import (
     Broker,
     BusinessClient,
     Commodity,
+    Labour,
+    Tempo,
     Transporter,
 )
 
@@ -36,6 +38,8 @@ ENTITY_MODELS = {
     "broker": Broker,
     "businessclient": BusinessClient,
     "commodity": Commodity,
+    "labour": Labour,
+    "tempo": Tempo,
     "transporter": Transporter,
 }
 
@@ -63,7 +67,19 @@ ENTITY_FIELDS = {
     "commodity": {
         "name",
         "type",
-        "notes",
+        "bill_hammali",
+        "mandi_hammali",
+        "fill_qty",
+    },
+
+    "labour": {
+        "name",
+        "phone_number",
+    },
+
+    "tempo": {
+        "name",
+        "phone_number",
     },
 
     "transporter": {
@@ -94,6 +110,14 @@ FILTER_FIELDS = {
     "commodity": {
         "name",
         "type",
+    },
+
+    "labour": {
+        "name",
+    },
+
+    "tempo": {
+        "name",
     },
 
     "transporter": {

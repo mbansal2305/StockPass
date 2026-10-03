@@ -23,7 +23,10 @@ from SalesAndTransport.schemas.bulk_transport import (
 )
 from SalesAndTransport.schemas.transport import TransportItemInputSchema
 from SalesAndTransport.api.transport import (
+    active_order_ids_for_transports,
     apply_transport_fields,
+    recalculate_order_fulfillment,
+    recalculate_transport_order_fulfillment,
     save_items,
     save_receipt,
     serialize_transport,
@@ -139,8 +142,14 @@ def update_child_transport(request, bulk_order, transport_data, index: int):
                 id=active_items[0].id,
                 order=item_data.order,
                 quantity=item_data.quantity,
+                order_entry=item_data.order_entry,
             )
         save_items(transport, [item_data], request.auth)
+    else:
+        recalculate_transport_order_fulfillment(
+            [transport.id],
+            request.auth,
+        )
 
 
 @router.post(
@@ -219,18 +228,25 @@ def get_bulk_transport(request, data: BulkTransportGetDeleteSchema):
 @transaction.atomic
 def delete_bulk_transport(request, data: BulkTransportGetDeleteSchema):
     bulk_order = get_object_or_404(BulkTransport, id=data.id, is_active=True)
+    transports = list(
+        Transport.objects.filter(
+            bulk_transport=bulk_order,
+            is_active=True,
+        )
+    )
+    affected_order_ids = active_order_ids_for_transports(
+        [transport.id for transport in transports]
+    )
     bulk_order.is_active = False
     bulk_order.d_by = request.auth
     bulk_order.save(update_fields=["is_active", "d_by"])
 
-    for transport in Transport.objects.filter(
-        bulk_transport=bulk_order,
-        is_active=True,
-    ):
+    for transport in transports:
         transport.is_active = False
         transport.d_by = request.auth
         transport.save(update_fields=["is_active", "d_by"])
 
+    recalculate_order_fulfillment(affected_order_ids, request.auth)
     return {"success": True, "id": bulk_order.id}
 
 

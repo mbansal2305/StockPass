@@ -9,6 +9,7 @@ from ninja import Router
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import BusinessClient, Order, PurchaseOrderSequence
+from SalesAndTransport.api.transport import recalculate_order_fulfillment
 from SalesAndTransport.schemas.order import (
     OrderCreateSchema,
     OrderListSchema,
@@ -224,10 +225,15 @@ def update_order(request, data: OrderUpdateSchema):
     try:
         order = get_object_or_404(Order, id=data.id, is_active=True)
 
-        for field, value in data.model_dump(
+        values = data.model_dump(
             exclude_unset=True,
             exclude={"id"},
-        ).items():
+        )
+        quantity_unit_changed = (
+            "quantity_unit" in values
+            and values["quantity_unit"] != order.quantity_unit
+        )
+        for field, value in values.items():
             if field in {"from_client", "to_client", "commodity", "broker"}:
                 field = f"{field}_id"
             setattr(order, field, value)
@@ -235,6 +241,10 @@ def update_order(request, data: OrderUpdateSchema):
         order.m_by = request.auth
         order.full_clean()
         order.save()
+
+        if quantity_unit_changed:
+            recalculate_order_fulfillment({order.id}, request.auth)
+            order.refresh_from_db(fields=["quantity_fulfilled"])
 
         return {
             "success": True,
@@ -310,6 +320,5 @@ def select_orders(request, data: OrderSelectSchema):
         }
     except ValueError as error:
         return 400, {"success": False, "message": str(error)}
-
 
 
