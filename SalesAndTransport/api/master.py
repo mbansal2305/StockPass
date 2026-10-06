@@ -1,16 +1,26 @@
+import base64
+import binascii
 import logging
 from typing import Any
+from uuid import uuid4
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.forms.models import model_to_dict
+from django.forms import ImageField
 from django.shortcuts import get_object_or_404
 from ninja import Router
+from PIL import Image
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import (
     Broker,
     BusinessClient,
+    BusinessClientProfilePicture,
     Commodity,
     Labour,
     Tempo,
@@ -61,6 +71,7 @@ ENTITY_FIELDS = {
         "type",
         "flag",
         "location_url",
+        "profile_picture",
         "notes",
     },
 
@@ -70,16 +81,19 @@ ENTITY_FIELDS = {
         "bill_hammali",
         "mandi_hammali",
         "fill_qty",
+        "notes",
     },
 
     "labour": {
         "name",
         "phone_number",
+        "notes",
     },
 
     "tempo": {
         "name",
         "phone_number",
+        "notes",
     },
 
     "transporter": {
@@ -194,7 +208,84 @@ def serialize_instance(instance):
         else:
             data[field.name] = value
 
+    if isinstance(instance, BusinessClient):
+        data["profile_picture"] = (
+            instance.profile_pictures.filter(is_active=True)
+            .order_by("-id")
+            .values_list("url", flat=True)
+            .first()
+        )
+
     return data
+
+
+def prepare_profile_picture(value: Any):
+    if not isinstance(value, str):
+        raise ValueError("profile_picture must be a base64 string.")
+
+    encoded_image = value
+    if value.startswith("data:"):
+        header, separator, encoded_image = value.partition(",")
+        if (
+            not separator
+            or not header.lower().startswith("data:image/")
+            or ";base64" not in header.lower()
+        ):
+            raise ValueError("profile_picture must contain a base64 image.")
+
+    try:
+        image_content = base64.b64decode(encoded_image, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("profile_picture is not valid base64.") from error
+
+    if not image_content:
+        raise ValueError("profile_picture cannot be empty.")
+
+    try:
+        image = ImageField().clean(
+            SimpleUploadedFile("profile_picture.jpg", image_content)
+        )
+    except ValidationError as error:
+        raise ValueError("profile_picture must be a valid image.") from error
+
+    image_format = image.image.format
+    extension = next(
+        (
+            suffix.lstrip(".")
+            for suffix, registered_format in Image.registered_extensions().items()
+            if registered_format == image_format
+        ),
+        None,
+    )
+    if extension is None:
+        raise ValueError("profile_picture uses an unsupported image format.")
+
+    return image_content, extension
+
+
+def save_profile_picture(request, business_client, image_data):
+    image_content, extension = image_data
+    storage_path = f"profile_picture/{uuid4().hex}.{extension}"
+    saved_path = default_storage.save(storage_path, ContentFile(image_content))
+
+    try:
+        picture = (
+            business_client.profile_pictures.filter(is_active=True)
+            .order_by("-id")
+            .first()
+        )
+        if picture is None:
+            picture = BusinessClientProfilePicture(
+                business_client=business_client,
+                c_by=request.auth,
+            )
+
+        picture.url = request.build_absolute_uri(default_storage.url(saved_path))
+        picture.m_by = request.auth
+        picture.save()
+    except Exception:
+        default_storage.delete(saved_path)
+        raise
 
 
 def paginate_queryset(queryset, page: int, page_size: int):
@@ -244,6 +335,12 @@ def add_entity(request, data: MasterAddUpdateSchema):
 
     try:
         validate_content(entity, content)
+        profile_picture = content.pop("profile_picture", None)
+        image_data = (
+            prepare_profile_picture(profile_picture)
+            if profile_picture is not None
+            else None
+        )
 
         model = get_model(entity)
 
@@ -255,6 +352,9 @@ def add_entity(request, data: MasterAddUpdateSchema):
         instance.full_clean()
         instance.save()
 
+        if image_data is not None:
+            save_profile_picture(request, instance, image_data)
+
         return {
             "success": True,
             "message": f"{entity} created successfully.",
@@ -263,12 +363,14 @@ def add_entity(request, data: MasterAddUpdateSchema):
         }
 
     except ValueError as e:
+        transaction.set_rollback(True)
         return 400, {
             "success": False,
             "message": str(e),
         }
 
     except Exception as e:
+        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Master entity request failed")
         return 400, {
@@ -296,6 +398,12 @@ def update_entity(request, data: MasterAddUpdateSchema):
 
     try:
         validate_content(entity, content)
+        profile_picture = content.pop("profile_picture", None)
+        image_data = (
+            prepare_profile_picture(profile_picture)
+            if profile_picture is not None
+            else None
+        )
 
         model = get_model(entity)
 
@@ -314,6 +422,9 @@ def update_entity(request, data: MasterAddUpdateSchema):
         instance.full_clean()
         instance.save()
 
+        if image_data is not None:
+            save_profile_picture(request, instance, image_data)
+
         return {
             "success": True,
             "message": f"{entity} updated successfully.",
@@ -322,12 +433,14 @@ def update_entity(request, data: MasterAddUpdateSchema):
         }
 
     except ValueError as e:
+        transaction.set_rollback(True)
         return 400, {
             "success": False,
             "message": str(e),
         }
 
     except Exception as e:
+        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Master entity request failed")
         return 400, {
@@ -529,6 +642,3 @@ def search_entities(request, data: MasterSearchSchema):
             "success": False,
             "message": str(e),
         }
-
-
-

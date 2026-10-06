@@ -60,7 +60,7 @@ class TransportCreateSchema(Schema):
     final_paid: Decimal = Decimal("0")
     extra_paid: Decimal = Decimal("0")
     shortage : Optional[Decimal] = Decimal("0")
-    status: TransportStatus = "draft"
+    status: TransportStatus = "pending"
     notes: Optional[str] = None
     items: list[TransportItemInputSchema]
 
@@ -156,11 +156,16 @@ class TransportOutSchema(Schema):
     adv_by_firm: Decimal
     final_paid: Decimal
     extra_paid: Decimal
+    shortage : Decimal = None
     status: str
     notes: Optional[str]
     wt_rcpt_src: Optional[str]
     wt_rcpt_dst: Optional[str]
     items: list[TransportItemOutSchema]
+
+
+class TransportListOutSchema(TransportOutSchema):
+    image: Optional[str] = None
 
 
 class TransportDetailResponseSchema(Schema):
@@ -173,7 +178,7 @@ class TransportPageSchema(Schema):
     page_size: int
     total: int
     total_pages: int
-    results: list[TransportOutSchema]
+    results: list[TransportListOutSchema]
 
 
 class TransportListResponseSchema(Schema):

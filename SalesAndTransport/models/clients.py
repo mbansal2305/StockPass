@@ -77,3 +77,12 @@ class BusinessClient(BaseModel):
 
     def __str__(self):
         return self.name
+
+
+class BusinessClientProfilePicture(BaseModel):
+    business_client = models.ForeignKey(
+        BusinessClient,
+        related_name="profile_pictures",
+        on_delete=models.CASCADE,
+    )
+    url = models.URLField(max_length=500)

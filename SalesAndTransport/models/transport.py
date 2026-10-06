@@ -49,11 +49,78 @@ class Transporter(BaseModel):
 
 class BulkTransport(BaseModel):
 
+    class TransportStatus(models.TextChoices):
+            PENDING = "pending", "Pending"
+            DELIVERY = "delivery", "Delivery"
+            FINANCE = "finance", "Finance"
+            PAID = "paid", "Paid"
+            DRAFT = "draft"
+
     title = models.CharField(
             max_length=100,
             db_index=True,
             default="Bulk Transport",
         )
+
+    loading_date = models.DateField(
+        null=True,
+        blank=True,
+    )
+
+    commodity = models.ForeignKey(
+            Commodity,
+            related_name="bulk_commodity",
+            on_delete=models.PROTECT,
+            null=True,
+            blank=True
+        )
+
+    bill_no = models.CharField(
+        max_length=20,
+        db_index=True,
+        null=True,
+        blank=True,
+    )
+
+    order = models.ForeignKey(
+        Order,
+        related_name="bulk_transports",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    billing_firm = models.ForeignKey(
+        BusinessClient,
+        related_name="bulk_transports_billed",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    transporter = models.ForeignKey(
+        "Transporter",
+        related_name="bulk_transports",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    to_client = models.ForeignKey(
+        BusinessClient,
+        related_name="bulk_transports_to",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    status = models.CharField(
+            max_length=20,
+            choices=TransportStatus.choices,
+            default=TransportStatus.DRAFT,
+            db_index=True,
+        )
+    
 
     class Meta:
         db_table = "bulk_transport"
@@ -104,11 +171,14 @@ class Transport(BaseModel):
         on_delete=models.PROTECT,
         blank=True,
         null=True
+
     )
 
     commodity = models.ForeignKey(
         Commodity,
-        related_name="transports",
+        related_name="commodity",
+        null=True,
+        blank=True,
         on_delete=models.PROTECT,
     )
 

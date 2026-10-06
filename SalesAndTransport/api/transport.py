@@ -1,6 +1,8 @@
+import base64
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from django.conf import settings
@@ -16,6 +18,7 @@ from ninja.files import UploadedFile
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import (
     BusinessClient,
+    BusinessClientProfilePicture,
     GodownTransaction,
     Order,
     Transport,
@@ -73,8 +76,21 @@ def serialize_transport_item(item: TransportItems):
     }
 
 
-def serialize_transport(transport: Transport):
-    return {
+def serialize_billing_firm_image(billing_firm: BusinessClient) -> str | None:
+    pictures = getattr(billing_firm, "active_profile_pictures", [])
+    if not pictures:
+        return None
+
+    filename = Path(urlsplit(pictures[0].url).path).name
+    if not filename:
+        raise ValueError("Billing firm profile picture has an invalid URL.")
+
+    with default_storage.open(f"profile_picture/{filename}", "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("ascii")
+
+
+def serialize_transport(transport: Transport, include_billing_firm_image: bool = False):
+    data = {
         "id": transport.id,
         "billing_firm": transport.billing_firm.name,
         "bill_no": transport.bill_no,
@@ -109,6 +125,11 @@ def serialize_transport(transport: Transport):
         "wt_rcpt_dst": transport.wt_rcpt_dst,
         "items": [serialize_transport_item(item) for item in transport.items.all()],
     }
+
+    if include_billing_firm_image:
+        data["image"] = serialize_billing_firm_image(transport.billing_firm)
+
+    return data
 
 
 def transport_queryset():
@@ -517,7 +538,20 @@ def list_transports(request, data: Form[TransportListSchema]):
             exclude={"page", "page_size"},
         ).items()
     }
-    queryset = transport_queryset().filter(is_active=True, **filters).order_by("id")
+    queryset = (
+        transport_queryset()
+        .prefetch_related(
+            Prefetch(
+                "billing_firm__profile_pictures",
+                queryset=BusinessClientProfilePicture.objects.filter(
+                    is_active=True,
+                ).order_by("-id"),
+                to_attr="active_profile_pictures",
+            )
+        )
+        .filter(is_active=True, bulk_transport__isnull=True, **filters)
+        .order_by("id")
+    )
     total = queryset.count()
     start = (data.page - 1) * data.page_size
     transports = queryset[start : start + data.page_size]
@@ -528,7 +562,10 @@ def list_transports(request, data: Form[TransportListSchema]):
             "page_size": data.page_size,
             "total": total,
             "total_pages": (total + data.page_size - 1) // data.page_size,
-            "results": [serialize_transport(transport) for transport in transports],
+            "results": [
+                serialize_transport(transport, include_billing_firm_image=True)
+                for transport in transports
+            ],
         },
     }
 

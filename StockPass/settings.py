@@ -61,7 +61,10 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:4173",
     "http://127.0.0.1:3000",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://scorpion-abiding-structure.ngrok-free.dev",
@@ -84,7 +87,8 @@ ROOT_URLCONF = 'StockPass.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # 'DIRS': [],
+        "DIRS": [BASE_DIR / "frontend_dist"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -106,10 +110,19 @@ ASGI_APPLICATION = 'StockPass.asgi.application'
 OFFLINE_MODE = os.getenv("STOCKPASS_OFFLINE", "false").lower() == "true"
 
 if OFFLINE_MODE:
+    DATA_DIR = Path(
+        os.getenv(
+            "STOCKPASS_DATA_DIR",
+            BASE_DIR / "data"
+        )
+    )
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "data" / "stockpass.sqlite3",
+            "NAME": DATA_DIR / "stockpass.sqlite3",
         }
     }
 else:
@@ -171,8 +184,17 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = '/static/'
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+
+if OFFLINE_MODE:
+    MEDIA_ROOT = DATA_DIR / "media"
+else:
+    MEDIA_ROOT = BASE_DIR / "media"
+
+MEDIA_URL = "/media/"
+
+STATICFILES_DIRS = [
+    BASE_DIR / "frontend_dist",
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -186,7 +208,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # === LOG DIRECTORY SETUP ===
-BASE_LOG_DIR = BASE_DIR / "logs"
+if OFFLINE_MODE:
+    BASE_LOG_DIR = DATA_DIR / "logs"
+else:
+    BASE_LOG_DIR = BASE_DIR / "logs"
+
+    
 TODAY = datetime.today().strftime("%Y-%m-%d")
 LOG_DIR = BASE_LOG_DIR / TODAY
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -221,11 +248,6 @@ LOGGING_HANDLERS = {
     },
     "file": get_file_handler("django.log", "INFO"),
     "errors_file": get_file_handler("errors.log", "ERROR"),
-    # "users_file": get_file_handler("users.log", "DEBUG"),
-    # "companies_file": get_file_handler("companies.log", "DEBUG"),
-    # "inventory_file": get_file_handler("inventory.log", "DEBUG"),
-    # "employees_file": get_file_handler("employees.log", "DEBUG"),
-    # Add more as needed
 }
 
 # === LOGGERS ===
@@ -240,27 +262,6 @@ LOGGING_LOGGERS = {
         "level": "INFO",
         "propagate": False,
     },
-    # "apps.users": {
-    #     "handlers": ["console", "users_file"],
-    #     "level": "DEBUG",
-    #     "propagate": False,
-    # },
-    # "apps.companies": {
-    #     "handlers": ["console", "companies_file"],
-    #     "level": "DEBUG",
-    #     "propagate": False,
-    # },
-    # "apps.inventory": {
-    #     "handlers": ["console", "inventory_file"],
-    #     "level": "DEBUG",
-    #     "propagate": False,
-    # },
-    # "apps.employees": {
-    #     "handlers": ["console", "employees_file"],
-    #     "level": "DEBUG",
-    #     "propagate": False,
-    # },
-    # Add more apps here
 }
 
 # === FINAL LOGGING CONFIG ===

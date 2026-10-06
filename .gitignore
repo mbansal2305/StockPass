@@ -1,5 +1,10 @@
 .venv
 .env
 logs/
+dist/
+frontend_dist/
 data/
+build/
+launcher.py
+StockPass.spec
 __pycache__

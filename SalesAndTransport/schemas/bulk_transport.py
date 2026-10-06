@@ -1,19 +1,34 @@
 import json
+from datetime import date
 from typing import Optional
 
 from ninja import Schema
 from pydantic import field_validator
 
 from SalesAndTransport.schemas.transport import (
-    TransportOutSchema,
     TransportCreateSchema,
-    TransportUpdateSchema,
+    TransportOutSchema,
+    TransportStatus,
 )
+
+
+class BulkTransportChildSchema(TransportCreateSchema):
+    id: Optional[int] = None
+    billing_firm: Optional[int] = None
+    commodity: Optional[int] = None
 
 
 class BulkTransportCreateSchema(Schema):
     title: str
-    transports: list[TransportCreateSchema]
+    loading_date: Optional[date] = None
+    bill_no: Optional[str] = None
+    order: Optional[int] = None
+    billing_firm: Optional[int] = None
+    transporter: Optional[int] = None
+    to_client: Optional[int] = None
+    commodity: Optional[int] = None
+    status: TransportStatus = "pending"
+    transports: list[BulkTransportChildSchema]
 
     @field_validator("title")
     @classmethod
@@ -36,7 +51,15 @@ class BulkTransportCreateSchema(Schema):
 class BulkTransportUpdateSchema(Schema):
     id: int
     title: Optional[str] = None
-    transports: Optional[list[TransportUpdateSchema]] = None
+    loading_date: Optional[date] = None
+    bill_no: Optional[str] = None
+    order: Optional[int] = None
+    billing_firm: Optional[int] = None
+    transporter: Optional[int] = None
+    to_client: Optional[int] = None
+    commodity: Optional[int] = None
+    status: Optional[TransportStatus] = None
+    transports: list[BulkTransportChildSchema]
 
     @field_validator("title")
     @classmethod
@@ -72,6 +95,15 @@ class BulkTransportSearchSchema(Schema):
 class BulkTransportOutSchema(Schema):
     id: int
     title: str
+    loading_date: Optional[date]
+    bill_no: Optional[str]
+    order: Optional[int]
+    billing_firm: Optional[int]
+    transporter: Optional[int]
+    to_client: Optional[int]
+    commodity: Optional[int]
+    status: str
+    selected_sources: list[int]
     transports: list[TransportOutSchema]
 
 

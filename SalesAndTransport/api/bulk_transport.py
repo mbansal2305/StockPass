@@ -8,7 +8,7 @@ from ninja import Form, Router
 from ninja.files import UploadedFile
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
-from SalesAndTransport.models import BulkTransport, Transport, TransportItems
+from SalesAndTransport.models import BulkTransport, Transport
 from SalesAndTransport.schemas.bulk_transport import (
     BulkTransportCreateSchema,
     BulkTransportDeleteResponseSchema,
@@ -16,20 +16,18 @@ from SalesAndTransport.schemas.bulk_transport import (
     BulkTransportGetDeleteSchema,
     BulkTransportListResponseSchema,
     BulkTransportListSchema,
-    BulkTransportOutSchema,
     BulkTransportSearchResponseSchema,
     BulkTransportSearchSchema,
     BulkTransportUpdateSchema,
 )
-from SalesAndTransport.schemas.transport import TransportItemInputSchema
 from SalesAndTransport.api.transport import (
     active_order_ids_for_transports,
     apply_transport_fields,
     recalculate_order_fulfillment,
-    recalculate_transport_order_fulfillment,
     save_items,
     save_receipt,
     serialize_transport,
+    sync_godown_transactions,
     transport_queryset,
     validate_items,
     transport_model_values,
@@ -42,18 +40,39 @@ logger = logging.getLogger("ninja")
 
 def bulk_queryset():
     active_transports = transport_queryset().filter(is_active=True)
-    return BulkTransport.objects.prefetch_related(
-        Prefetch("transports", queryset=active_transports)
+    return BulkTransport.objects.select_related(
+        "billing_firm",
+        "commodity",
+        "order",
+        "to_client",
+        "transporter",
+    ).prefetch_related(
+        Prefetch("bulk_transport", queryset=active_transports)
     )
 
 
 def serialize_bulk_transport(bulk_transport: BulkTransport):
+    transports = list(bulk_transport.bulk_transport.all())
     return {
         "id": bulk_transport.id,
         "title": bulk_transport.title,
+        "loading_date": bulk_transport.loading_date,
+        "bill_no": bulk_transport.bill_no,
+        "order": bulk_transport.order_id,
+        "billing_firm": bulk_transport.billing_firm_id,
+        "transporter": bulk_transport.transporter_id,
+        "to_client": bulk_transport.to_client_id,
+        "commodity": bulk_transport.commodity_id,
+        "status": bulk_transport.status,
+        "selected_sources": sorted(
+            {
+                transport.from_client_id
+                for transport in transports
+                if transport.from_client_id is not None
+            }
+        ),
         "transports": [
-            serialize_transport(transport)
-            for transport in bulk_transport.transports.all()
+            serialize_transport(transport) for transport in transports
         ],
     }
 
@@ -89,14 +108,114 @@ def validate_bulk_create(data: BulkTransportCreateSchema):
     if not data.transports:
         raise ValueError("At least one transport is required.")
     for transport_data in data.transports:
+        if transport_data.id is not None:
+            raise ValueError(
+                "transport id must not be provided when adding a bulk transport."
+            )
         validate_items(transport_data.items, creating=True)
         if len(transport_data.items) != 1:
             raise ValueError("Each transport must have exactly one order item.")
 
 
-def create_child_transport(request, bulk_order, transport_data, index: int):
+def validate_bulk_common_values(values, require_transport_fields=True):
+    if require_transport_fields and values["billing_firm"] is None:
+        raise ValueError("billing_firm is required for bulk transports.")
+    if require_transport_fields and values["commodity"] is None:
+        raise ValueError("commodity is required for bulk transports.")
+
+
+def resolve_bulk_common_values(data, bulk_order=None):
+    common_fields = (
+        "loading_date",
+        "bill_no",
+        "order",
+        "billing_firm",
+        "transporter",
+        "to_client",
+        "commodity",
+        "status",
+    )
+    if bulk_order is None:
+        first_transport = data.transports[0]
+        values = {
+            "loading_date": first_transport.loading_date,
+            "bill_no": first_transport.bill_no,
+            "order": first_transport.items[0].order,
+            "billing_firm": first_transport.billing_firm,
+            "transporter": first_transport.transporter,
+            "to_client": first_transport.to_client,
+            "commodity": first_transport.commodity,
+            "status": first_transport.status,
+        }
+    else:
+        values = {
+            "loading_date": bulk_order.loading_date,
+            "bill_no": bulk_order.bill_no,
+            "order": bulk_order.order_id,
+            "billing_firm": bulk_order.billing_firm_id,
+            "transporter": bulk_order.transporter_id,
+            "to_client": bulk_order.to_client_id,
+            "commodity": bulk_order.commodity_id,
+            "status": bulk_order.status,
+        }
+
+    supplied_values = data.model_dump(
+        exclude_unset=True,
+        exclude={"id", "title", "transports"},
+    )
+    values.update(supplied_values)
+    if (
+        data.transports
+        and data.transports[0].items
+        and values["order"] is None
+    ):
+        values["order"] = data.transports[0].items[0].order
+    return {field: values[field] for field in common_fields}
+
+
+def save_bulk_common_values(bulk_order, values, user):
+    model_values = {}
+    for field, value in values.items():
+        if field in {"order", "billing_firm", "transporter", "to_client", "commodity"}:
+            field = f"{field}_id"
+        model_values[field] = value
+
+    for field, value in model_values.items():
+        setattr(bulk_order, field, value)
+    bulk_order.m_by = user
+    bulk_order.full_clean()
+    bulk_order.save()
+
+
+def child_transport_values(transport_data, common_values):
+    values = transport_data.model_dump(
+        exclude_unset=True,
+        exclude={"id", "items"},
+    )
+    for field, value in common_values.items():
+        if field != "order":
+            values[field] = value
+    return values
+
+
+def items_with_common_order(transport_data, common_values):
+    if common_values["order"] is None:
+        return transport_data.items
+    return [
+        item.model_copy(update={"order": common_values["order"]})
+        for item in transport_data.items
+    ]
+
+
+def create_child_transport(
+    request,
+    bulk_order,
+    transport_data,
+    common_values,
+    index: int,
+):
     values = transport_model_values(
-        transport_data.model_dump(exclude_unset=True, exclude={"items"})
+        child_transport_values(transport_data, common_values)
     )
     values.setdefault("quantity_unit", "quintal")
     set_transport_receipts(request, values, index)
@@ -107,11 +226,43 @@ def create_child_transport(request, bulk_order, transport_data, index: int):
     )
     transport.full_clean()
     transport.save()
-    save_items(transport, transport_data.items, request.auth)
+    items = items_with_common_order(transport_data, common_values)
+    save_items(transport, items, request.auth)
+    sync_godown_transactions(transport, request.auth)
     return transport
 
 
-def update_child_transport(request, bulk_order, transport_data, index: int):
+def godown_fields_changed(transport, values):
+    relation_fields = {
+        "commodity": "commodity_id",
+        "from_client": "from_client_id",
+        "to_client": "to_client_id",
+    }
+    for field in (
+        "commodity",
+        "from_client",
+        "to_client",
+        "gross_wt",
+        "gross_wt_unit",
+        "quantity_unit",
+    ):
+        if field not in values:
+            continue
+        model_field = relation_fields.get(field, field)
+        if field == "gross_wt_unit":
+            model_field = "quantity_unit"
+        if getattr(transport, model_field) != values[field]:
+            return True
+    return False
+
+
+def update_child_transport(
+    request,
+    bulk_order,
+    transport_data,
+    common_values,
+    index: int,
+):
     transport = get_object_or_404(
         transport_queryset(),
         id=transport_data.id,
@@ -119,37 +270,98 @@ def update_child_transport(request, bulk_order, transport_data, index: int):
         is_active=True,
     )
     active_items = list(transport.items.filter(is_active=True))
-    if transport_data.items is not None:
-        validate_items(transport_data.items, creating=False)
-        if len(transport_data.items) != 1:
-            raise ValueError("Each transport must have exactly one order item.")
-    elif len(active_items) != 1:
-        raise ValueError("Each transport must have exactly one active order item.")
+    validate_items(transport_data.items, creating=False)
+    if len(transport_data.items) != 1:
+        raise ValueError("Each transport must have exactly one order item.")
 
-    values = transport_data.model_dump(exclude_unset=True, exclude={"id", "items"})
+    values = child_transport_values(transport_data, common_values)
     if "gross_wt_unit" in values:
         values["quantity_unit"] = values.pop("gross_wt_unit")
     set_transport_receipts(request, values, index)
+    update_godown_ledger = godown_fields_changed(transport, values)
+    if update_godown_ledger:
+        sync_godown_transactions(
+            transport,
+            request.auth,
+            reverse_existing=True,
+            record_current=False,
+        )
     apply_transport_fields(transport, values)
     transport.m_by = request.auth
     transport.full_clean()
     transport.save()
 
-    if transport_data.items is not None:
-        item_data = transport_data.items[0]
-        if item_data.id is None and len(active_items) == 1:
-            item_data = TransportItemInputSchema(
-                id=active_items[0].id,
-                order=item_data.order,
-                quantity=item_data.quantity,
-                order_entry=item_data.order_entry,
-            )
-        save_items(transport, [item_data], request.auth)
-    else:
-        recalculate_transport_order_fulfillment(
-            [transport.id],
-            request.auth,
+    items = items_with_common_order(transport_data, common_values)
+    item_data = items[0]
+    if item_data.id is None and len(active_items) == 1:
+        item_data = item_data.model_copy(update={"id": active_items[0].id})
+    save_items(transport, [item_data], request.auth)
+
+    if update_godown_ledger:
+        sync_godown_transactions(transport, request.auth)
+
+
+def delete_child_transport(transport, user):
+    sync_godown_transactions(
+        transport,
+        user,
+        reverse_existing=True,
+        record_current=False,
+    )
+    transport.is_active = False
+    transport.d_by = user
+    transport.save(update_fields=["is_active", "d_by", "m_at"])
+
+
+def update_bulk_children(request, bulk_order, data, common_values):
+    transports = list(
+        Transport.objects.filter(
+            bulk_transport=bulk_order,
+            is_active=True,
         )
+    )
+    existing_by_id = {transport.id: transport for transport in transports}
+    affected_order_ids = active_order_ids_for_transports(
+        [transport.id for transport in transports]
+    )
+
+    requested_ids = [
+        transport_data.id
+        for transport_data in data.transports
+        if transport_data.id is not None
+    ]
+    if len(requested_ids) != len(set(requested_ids)):
+        raise ValueError("A transport may only be updated once per request.")
+    unknown_ids = set(requested_ids) - existing_by_id.keys()
+    if unknown_ids:
+        raise ValueError("A transport in this bulk transport was not found.")
+
+    retained_ids = set()
+    for index, transport_data in enumerate(data.transports):
+        if transport_data.id is None:
+            transport = create_child_transport(
+                request,
+                bulk_order,
+                transport_data,
+                common_values,
+                index,
+            )
+        else:
+            transport = existing_by_id[transport_data.id]
+            update_child_transport(
+                request,
+                bulk_order,
+                transport_data,
+                common_values,
+                index,
+            )
+        retained_ids.add(transport.id)
+
+    for transport in transports:
+        if transport.id not in retained_ids:
+            delete_child_transport(transport, request.auth)
+
+    recalculate_order_fulfillment(affected_order_ids, request.auth)
 
 
 @router.post(
@@ -160,16 +372,24 @@ def update_child_transport(request, bulk_order, transport_data, index: int):
 def add_bulk_transport(request, data: Form[BulkTransportCreateSchema]):
     try:
         validate_bulk_create(data)
+        common_values = resolve_bulk_common_values(data)
+        validate_bulk_common_values(common_values)
         bulk_order = BulkTransport(title=data.title, c_by=request.auth)
-        bulk_order.full_clean()
-        bulk_order.save()
+        save_bulk_common_values(bulk_order, common_values, request.auth)
 
         for index, transport_data in enumerate(data.transports):
-            create_child_transport(request, bulk_order, transport_data, index)
+            create_child_transport(
+                request,
+                bulk_order,
+                transport_data,
+                common_values,
+                index,
+            )
 
         bulk_order = bulk_queryset().get(id=bulk_order.id)
         return {"success": True, "data": serialize_bulk_transport(bulk_order)}
     except Exception as error:
+        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Bulk transport request failed")
         return 400, {"success": False, "message": str(error)}
@@ -187,22 +407,20 @@ def update_bulk_transport(request, data: Form[BulkTransportUpdateSchema]):
             id=data.id,
             is_active=True,
         )
+        common_values = resolve_bulk_common_values(data, bulk_order)
+        validate_bulk_common_values(
+            common_values,
+            require_transport_fields=bool(data.transports),
+        )
         if data.title is not None:
             bulk_order.title = data.title
-        bulk_order.m_by = request.auth
-        bulk_order.full_clean()
-        bulk_order.save()
-
-        if data.transports is not None:
-            transport_ids = [transport.id for transport in data.transports]
-            if len(transport_ids) != len(set(transport_ids)):
-                raise ValueError("A transport may only be updated once per request.")
-            for index, transport_data in enumerate(data.transports):
-                update_child_transport(request, bulk_order, transport_data, index)
+        save_bulk_common_values(bulk_order, common_values, request.auth)
+        update_bulk_children(request, bulk_order, data, common_values)
 
         bulk_order = bulk_queryset().get(id=bulk_order.id)
         return {"success": True, "data": serialize_bulk_transport(bulk_order)}
     except Exception as error:
+        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Bulk transport request failed")
         return 400, {"success": False, "message": str(error)}
@@ -242,9 +460,7 @@ def delete_bulk_transport(request, data: BulkTransportGetDeleteSchema):
     bulk_order.save(update_fields=["is_active", "d_by"])
 
     for transport in transports:
-        transport.is_active = False
-        transport.d_by = request.auth
-        transport.save(update_fields=["is_active", "d_by"])
+        delete_child_transport(transport, request.auth)
 
     recalculate_order_fulfillment(affected_order_ids, request.auth)
     return {"success": True, "id": bulk_order.id}
