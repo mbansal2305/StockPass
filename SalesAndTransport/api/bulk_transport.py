@@ -108,20 +108,9 @@ def validate_bulk_create(data: BulkTransportCreateSchema):
     if not data.transports:
         raise ValueError("At least one transport is required.")
     for transport_data in data.transports:
-        if transport_data.id is not None:
-            raise ValueError(
-                "transport id must not be provided when adding a bulk transport."
-            )
         validate_items(transport_data.items, creating=True)
         if len(transport_data.items) != 1:
             raise ValueError("Each transport must have exactly one order item.")
-
-
-def validate_bulk_common_values(values, require_transport_fields=True):
-    if require_transport_fields and values["billing_firm"] is None:
-        raise ValueError("billing_firm is required for bulk transports.")
-    if require_transport_fields and values["commodity"] is None:
-        raise ValueError("commodity is required for bulk transports.")
 
 
 def resolve_bulk_common_values(data, bulk_order=None):
@@ -164,12 +153,6 @@ def resolve_bulk_common_values(data, bulk_order=None):
         exclude={"id", "title", "transports"},
     )
     values.update(supplied_values)
-    if (
-        data.transports
-        and data.transports[0].items
-        and values["order"] is None
-    ):
-        values["order"] = data.transports[0].items[0].order
     return {field: values[field] for field in common_fields}
 
 
@@ -238,14 +221,7 @@ def godown_fields_changed(transport, values):
         "from_client": "from_client_id",
         "to_client": "to_client_id",
     }
-    for field in (
-        "commodity",
-        "from_client",
-        "to_client",
-        "gross_wt",
-        "gross_wt_unit",
-        "quantity_unit",
-    ):
+    for field in ("commodity", "from_client", "to_client", "gross_wt", "gross_wt_unit"):
         if field not in values:
             continue
         model_field = relation_fields.get(field, field)
@@ -373,7 +349,6 @@ def add_bulk_transport(request, data: Form[BulkTransportCreateSchema]):
     try:
         validate_bulk_create(data)
         common_values = resolve_bulk_common_values(data)
-        validate_bulk_common_values(common_values)
         bulk_order = BulkTransport(title=data.title, c_by=request.auth)
         save_bulk_common_values(bulk_order, common_values, request.auth)
 
@@ -389,7 +364,6 @@ def add_bulk_transport(request, data: Form[BulkTransportCreateSchema]):
         bulk_order = bulk_queryset().get(id=bulk_order.id)
         return {"success": True, "data": serialize_bulk_transport(bulk_order)}
     except Exception as error:
-        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Bulk transport request failed")
         return 400, {"success": False, "message": str(error)}
@@ -408,10 +382,6 @@ def update_bulk_transport(request, data: Form[BulkTransportUpdateSchema]):
             is_active=True,
         )
         common_values = resolve_bulk_common_values(data, bulk_order)
-        validate_bulk_common_values(
-            common_values,
-            require_transport_fields=bool(data.transports),
-        )
         if data.title is not None:
             bulk_order.title = data.title
         save_bulk_common_values(bulk_order, common_values, request.auth)
@@ -420,7 +390,6 @@ def update_bulk_transport(request, data: Form[BulkTransportUpdateSchema]):
         bulk_order = bulk_queryset().get(id=bulk_order.id)
         return {"success": True, "data": serialize_bulk_transport(bulk_order)}
     except Exception as error:
-        transaction.set_rollback(True)
         if settings.DEBUG:
             logger.exception("Bulk transport request failed")
         return 400, {"success": False, "message": str(error)}
@@ -460,7 +429,9 @@ def delete_bulk_transport(request, data: BulkTransportGetDeleteSchema):
     bulk_order.save(update_fields=["is_active", "d_by"])
 
     for transport in transports:
-        delete_child_transport(transport, request.auth)
+        transport.is_active = False
+        transport.d_by = request.auth
+        transport.save(update_fields=["is_active", "d_by"])
 
     recalculate_order_fulfillment(affected_order_ids, request.auth)
     return {"success": True, "id": bulk_order.id}
