@@ -40,6 +40,8 @@ class BulkTransportCreateSchema(Schema):
     @field_validator("transports", mode="before")
     @classmethod
     def parse_transports_form_value(cls, value):
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+            value = value[0]
         if isinstance(value, str):
             try:
                 return json.loads(value)
@@ -71,6 +73,8 @@ class BulkTransportUpdateSchema(Schema):
     @field_validator("transports", mode="before")
     @classmethod
     def parse_transports_form_value(cls, value):
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
+            value = value[0]
         if isinstance(value, str):
             try:
                 return json.loads(value)
@@ -112,12 +116,25 @@ class BulkTransportDetailResponseSchema(Schema):
     data: BulkTransportOutSchema
 
 
+class BulkTransportListItemSchema(Schema):
+    id: int
+    loading_date: Optional[date]
+    title: str
+    commodity: Optional[str]
+    bill_no: Optional[str]
+    order: Optional[str]
+    billing_firm: Optional[str]
+    to_client: Optional[str]
+    status: str
+    num_vehicles: int
+
+
 class BulkTransportPageSchema(Schema):
     page: int
     page_size: int
     total: int
     total_pages: int
-    results: list[BulkTransportOutSchema]
+    results: list[BulkTransportListItemSchema]
 
 
 class BulkTransportListResponseSchema(Schema):

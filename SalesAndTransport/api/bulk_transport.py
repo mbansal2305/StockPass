@@ -4,9 +4,10 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
-from ninja import Form, Router
+from ninja import Form, Query, Router
 from ninja.files import UploadedFile
 
+from SalesAndTransport.models.order import Order
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import BulkTransport, Transport
 from SalesAndTransport.schemas.bulk_transport import (
@@ -74,6 +75,34 @@ def serialize_bulk_transport(bulk_transport: BulkTransport):
         "transports": [
             serialize_transport(transport) for transport in transports
         ],
+    }
+
+
+def serialize_bulk_transport_list_item(bulk_transport: BulkTransport):
+    commodity = bulk_transport.commodity
+    commodity_name = None
+    if commodity:
+        commodity_name = commodity.name
+        if commodity.type:
+            commodity_name += f" ({commodity.type})"
+
+    return {
+        "id": bulk_transport.id,
+        "loading_date": bulk_transport.loading_date,
+        "title": bulk_transport.title,
+        "commodity": commodity_name,
+        "bill_no": bulk_transport.bill_no,
+        "order": bulk_transport.order.order_no if bulk_transport.order else None,
+        "billing_firm": (
+            bulk_transport.billing_firm.name
+            if bulk_transport.billing_firm
+            else None
+        ),
+        "to_client": (
+            bulk_transport.to_client.name if bulk_transport.to_client else None
+        ),
+        "status": bulk_transport.status,
+        "num_vehicles": len(bulk_transport.bulk_transport.all()),
     }
 
 
@@ -399,7 +428,7 @@ def update_bulk_transport(request, data: Form[BulkTransportUpdateSchema]):
     "/get",
     response={200: BulkTransportDetailResponseSchema},
 )
-def get_bulk_transport(request, data: BulkTransportGetDeleteSchema):
+def get_bulk_transport(request, data: Query[BulkTransportGetDeleteSchema]):
     bulk_order = get_object_or_404(
         bulk_queryset(),
         id=data.id,
@@ -456,7 +485,9 @@ def list_bulk_transports(request, data: Form[BulkTransportListSchema]):
             "page_size": data.page_size,
             "total": total,
             "total_pages": (total + data.page_size - 1) // data.page_size,
-            "results": [serialize_bulk_transport(item) for item in bulk_orders],
+            "results": [
+                serialize_bulk_transport_list_item(item) for item in bulk_orders
+            ],
         },
     }
 
@@ -474,4 +505,49 @@ def search_bulk_transports(request, data: Form[BulkTransportSearchSchema]):
         "success": True,
         "total": queryset.count(),
         "results": [serialize_bulk_transport(item) for item in queryset],
+    }
+
+
+
+
+@router.get("/orders/sel/", response={200: dict})
+def select_purchase_orders(request):
+    orders = Order.objects.filter(
+        is_active=True,
+        status__in=[Order.OrderStatus.PENDING, Order.OrderStatus.DRAFT],
+    ).select_related(
+        "commodity",
+        "from_client",
+        "to_client",
+    ).order_by("order_no", "id")
+
+    return {
+        "success": True,
+        "data": [
+            {
+                "id": order.id,
+                "order_type": order.type,
+                "status": order.status,
+                "order_number": order.order_no,
+                "commodity": order.commodity.name,
+                "commodity_type" : order.commodity.type,
+                "commodity_id" : order.commodity.id,
+                "order_qty" : order.quantity,
+                "rem_qty" : (order.quantity - order.quantity_fulfilled),
+                "qty_unit" : order.quantity_unit,
+                "from_client": (
+                    order.from_client.name
+                    if order.type == Order.OrderType.PURCHASE_ORDER
+                    and order.from_client
+                    else None
+                ),
+                "to_client": (
+                    order.to_client.name
+                    if order.type == Order.OrderType.SALES_ORDER
+                    and order.to_client
+                    else None
+                ),
+            }
+            for order in orders
+        ],
     }

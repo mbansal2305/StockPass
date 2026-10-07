@@ -166,6 +166,7 @@ class TransportOutSchema(Schema):
 
 class TransportListOutSchema(TransportOutSchema):
     image: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 class TransportDetailResponseSchema(Schema):

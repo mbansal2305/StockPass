@@ -76,17 +76,27 @@ def serialize_transport_item(item: TransportItems):
     }
 
 
-def serialize_billing_firm_image(billing_firm: BusinessClient) -> str | None:
+def serialize_billing_firm_image(
+    billing_firm: BusinessClient,
+) -> tuple[str | None, str | None]:
     pictures = getattr(billing_firm, "active_profile_pictures", [])
     if not pictures:
-        return None
+        return None, None
 
     filename = Path(urlsplit(pictures[0].url).path).name
     if not filename:
         raise ValueError("Billing firm profile picture has an invalid URL.")
 
-    with default_storage.open(f"profile_picture/{filename}", "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("ascii")
+    try:
+        with default_storage.open(
+            f"profile_picture/{filename}",
+            "rb",
+        ) as image_file:
+            image_content = image_file.read()
+    except FileNotFoundError:
+        return None, None
+
+    return base64.b64encode(image_content).decode("ascii"), pictures[0].url
 
 
 def serialize_transport(transport: Transport, include_billing_firm_image: bool = False):
@@ -127,7 +137,9 @@ def serialize_transport(transport: Transport, include_billing_firm_image: bool =
     }
 
     if include_billing_firm_image:
-        data["image"] = serialize_billing_firm_image(transport.billing_firm)
+        data["image"], data["image_url"] = serialize_billing_firm_image(
+            transport.billing_firm,
+        )
 
     return data
 
