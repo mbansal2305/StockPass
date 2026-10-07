@@ -26,6 +26,48 @@ class Transporter(BaseModel):
         null=True,
     )
 
+    transaction_type = models.CharField(
+        max_length=3,
+        blank=True,
+        null=True,
+    )
+
+    account_number = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+    )
+
+    account_name = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+    )
+
+    ifsc_code = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+    )
+
+    bank = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+    )
+
+    branch = models.CharField(
+        max_length=40,
+        blank=True,
+        null=True,
+    )
+
+    email = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+
     city = models.CharField(
         max_length=30,
         blank=True,

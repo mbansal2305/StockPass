@@ -14,6 +14,7 @@ from SalesAndTransport.schemas.order import (
     OrderCreateSchema,
     OrderListSchema,
     OrderSelectSchema,
+    OrderStatusUpdateSchema,
     OrderUpdateSchema,
     OrderGetDeleteSchema,
 )
@@ -257,6 +258,21 @@ def update_order(request, data: OrderUpdateSchema):
         return 400, {"success": False, "message": str(error)}
 
 
+@router.patch("/status/upd/", response={200: dict})
+@transaction.atomic
+def update_order_status(request, data: OrderStatusUpdateSchema):
+    order = get_object_or_404(Order, id=data.id, is_active=True)
+    order.status = data.status
+    order.m_by = request.auth
+    order.save(update_fields=["status", "m_by", "m_at"])
+
+    return {
+        "success": True,
+        "message": "order status updated successfully.",
+        "data": {"id": order.id, "status": order.status},
+    }
+
+
 @router.get("/get/")
 def get_order(request, data: OrderGetDeleteSchema):
     order = get_object_or_404(
@@ -320,5 +336,4 @@ def select_orders(request, data: OrderSelectSchema):
         }
     except ValueError as error:
         return 400, {"success": False, "message": str(error)}
-
 

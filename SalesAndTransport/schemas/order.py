@@ -51,6 +51,11 @@ class OrderGetDeleteSchema(Schema):
     id: int
 
 
+class OrderStatusUpdateSchema(Schema):
+    id: int
+    status: OrderStatus
+
+
 class OrderListSchema(Schema):
     status: Optional[OrderStatus] = None
     contract_date_from: Optional[date] = None

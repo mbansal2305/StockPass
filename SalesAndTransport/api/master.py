@@ -1,7 +1,9 @@
 import base64
 import binascii
 import logging
+from io import BytesIO
 from typing import Any
+from urllib.parse import unquote, urlsplit
 from uuid import uuid4
 
 from django.conf import settings
@@ -14,7 +16,7 @@ from django.forms.models import model_to_dict
 from django.forms import ImageField
 from django.shortcuts import get_object_or_404
 from ninja import Router
-from PIL import Image
+from PIL import Image, ImageOps
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
 from SalesAndTransport.models import (
@@ -68,6 +70,7 @@ ENTITY_FIELDS = {
         "address",
         "city",
         "pincode",
+        "maan_no",
         "type",
         "flag",
         "location_url",
@@ -100,6 +103,13 @@ ENTITY_FIELDS = {
         "name",
         "agency",
         "phone_number",
+        "transaction_type",
+        "account_number",
+        "account_name",
+        "ifsc_code",
+        "bank",
+        "branch",
+        "email",
         "city",
         "notes",
     },
@@ -177,6 +187,53 @@ def validate_filters(entity: str, filters: dict[str, Any]):
             f"Invalid filter field(s) for {entity}: "
             f"{', '.join(sorted(invalid_fields))}"
         )
+
+
+def resize_profile_picture(image_content: bytes, image_format: str) -> bytes:
+    output = BytesIO()
+    with Image.open(BytesIO(image_content)) as source_image:
+        image = ImageOps.exif_transpose(source_image)
+        image = ImageOps.fit(
+            image,
+            (256, 256),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+
+        if image_format == "JPEG" and image.mode not in ("RGB", "L", "CMYK"):
+            image = image.convert("RGB")
+
+        image.save(output, format=image_format)
+
+    return output.getvalue()
+
+
+def profile_picture_storage_path(picture_url: str) -> str | None:
+    media_url = urlsplit(settings.MEDIA_URL)
+    picture_url_parts = urlsplit(picture_url)
+
+    if media_url.netloc and (
+        picture_url_parts.scheme != media_url.scheme
+        or picture_url_parts.netloc != media_url.netloc
+    ):
+        return None
+
+    media_path = f"{media_url.path.rstrip('/')}/"
+    picture_path = unquote(picture_url_parts.path)
+    if not picture_path.startswith(media_path):
+        return None
+
+    storage_path = picture_path[len(media_path):]
+    path_parts = storage_path.split("/")
+    if (
+        len(path_parts) != 2
+        or path_parts[0] != "profile_picture"
+        or not path_parts[1]
+        or "\\" in storage_path
+    ):
+        return None
+
+    return storage_path
 
 
 def serialize_instance(instance):
@@ -260,6 +317,7 @@ def prepare_profile_picture(value: Any):
     if extension is None:
         raise ValueError("profile_picture uses an unsupported image format.")
 
+    image_content = resize_profile_picture(image_content, image_format)
     return image_content, extension
 
 
@@ -267,6 +325,7 @@ def save_profile_picture(request, business_client, image_data):
     image_content, extension = image_data
     storage_path = f"profile_picture/{uuid4().hex}.{extension}"
     saved_path = default_storage.save(storage_path, ContentFile(image_content))
+    old_storage_path = None
 
     try:
         picture = (
@@ -280,12 +339,20 @@ def save_profile_picture(request, business_client, image_data):
                 c_by=request.auth,
             )
 
+        if picture.pk:
+            old_storage_path = profile_picture_storage_path(picture.url)
+
         picture.url = request.build_absolute_uri(default_storage.url(saved_path))
         picture.m_by = request.auth
         picture.save()
     except Exception:
         default_storage.delete(saved_path)
         raise
+
+    if old_storage_path and old_storage_path != saved_path:
+        transaction.on_commit(
+            lambda path=old_storage_path: default_storage.delete(path)
+        )
 
 
 def paginate_queryset(queryset, page: int, page_size: int):

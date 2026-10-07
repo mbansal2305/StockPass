@@ -83,20 +83,21 @@ def serialize_billing_firm_image(
     if not pictures:
         return None, None
 
-    filename = Path(urlsplit(pictures[0].url).path).name
-    if not filename:
-        raise ValueError("Billing firm profile picture has an invalid URL.")
+    # filename = Path(urlsplit(pictures[0].url).path).name
+    # if not filename:
+    #     raise ValueError("Billing firm profile picture has an invalid URL.")
 
-    try:
-        with default_storage.open(
-            f"profile_picture/{filename}",
-            "rb",
-        ) as image_file:
-            image_content = image_file.read()
-    except FileNotFoundError:
-        return None, None
+    # try:
+    #     with default_storage.open(
+    #         f"profile_picture/{filename}",
+    #         "rb",
+    #     ) as image_file:
+    #         image_content = image_file.read()
+    # except FileNotFoundError:
+    #     return None, None
 
-    return base64.b64encode(image_content).decode("ascii"), pictures[0].url
+    # return base64.b64encode(image_content).decode("ascii"), pictures[0].url
+    return None, pictures[0].url
 
 
 def serialize_transport(transport: Transport, include_billing_firm_image: bool = False):

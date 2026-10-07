@@ -44,6 +44,12 @@ class BusinessClient(BaseModel):
         db_index=True,
     )
 
+    maan_no = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+    )
+
     type = models.CharField(
         max_length=30,
         choices=ClientType.choices,

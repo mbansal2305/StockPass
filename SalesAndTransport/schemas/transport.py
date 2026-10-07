@@ -115,7 +115,7 @@ class TransportListSchema(Schema):
     commodity: Optional[int] = None
     billing_firm: Optional[int] = None
     page: int = 1
-    page_size: int = 10
+    page_size: int = 100
 
 
 class TransportSearchSchema(Schema):
