@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from ninja import Schema
@@ -21,6 +22,7 @@ class BulkTransportChildSchema(TransportCreateSchema):
 class BulkTransportCreateSchema(Schema):
     title: str
     loading_date: Optional[date] = None
+    total_rcvd_wt: Optional[Decimal] = None
     bill_no: Optional[str] = None
     order: Optional[int] = None
     billing_firm: Optional[int] = None
@@ -54,6 +56,7 @@ class BulkTransportUpdateSchema(Schema):
     id: int
     title: Optional[str] = None
     loading_date: Optional[date] = None
+    total_rcvd_wt: Optional[Decimal] = None
     bill_no: Optional[str] = None
     order: Optional[int] = None
     billing_firm: Optional[int] = None
@@ -100,6 +103,7 @@ class BulkTransportOutSchema(Schema):
     id: int
     title: str
     loading_date: Optional[date]
+    total_rcvd_wt: Decimal
     bill_no: Optional[str]
     order: Optional[int]
     billing_firm: Optional[int]

@@ -162,6 +162,12 @@ class BulkTransport(BaseModel):
             default=TransportStatus.DRAFT,
             db_index=True,
         )
+
+    total_rcvd_wt = models.DecimalField(
+            max_digits=15,
+            decimal_places=3,
+            default=0,
+        )
     
 
     class Meta:

@@ -11,7 +11,14 @@ from SalesAndTransport.api.master import (
     save_profile_picture,
     validate_content,
 )
-from SalesAndTransport.api.transport import serialize_billing_firm_image
+from SalesAndTransport.api.transport import (
+    serialize_billing_firm_image,
+    serialize_transporter_bank,
+)
+from SalesAndTransport.schemas.transport import (
+    TransportPaymentsListSchema,
+    TransporterBankSchema,
+)
 
 
 class TransporterMasterContentTests(TestCase):
@@ -140,3 +147,59 @@ class SerializeBillingFirmImageTests(TestCase):
 
         self.assertIsNone(image)
         self.assertIsNone(image_url)
+
+
+class TransportPaymentsListSchemaTests(TestCase):
+    def test_has_its_own_filters_and_pagination_defaults(self):
+        data = TransportPaymentsListSchema(transporter=12, status="paid")
+
+        self.assertEqual(data.transporter, 12)
+        self.assertEqual(data.status, "paid")
+        self.assertEqual(data.page, 1)
+        self.assertEqual(data.page_size, 100)
+
+
+class SerializeTransporterBankTests(TestCase):
+    def test_serializes_all_transporter_bank_fields(self):
+        transporter = SimpleNamespace(
+            transaction_type="NEFT",
+            account_number="12345678901234567890",
+            account_name="Transporter Account",
+            ifsc_code="BANK012345678901234",
+            bank="Example Bank",
+            branch="Main Branch",
+            email="transporter@example.com",
+        )
+
+        bank_details = serialize_transporter_bank(transporter)
+
+        self.assertEqual(
+            bank_details,
+            {
+                "transaction_type": "NEFT",
+                "account_number": "12345678901234567890",
+                "account_name": "Transporter Account",
+                "ifsc_code": "BANK012345678901234",
+                "bank": "Example Bank",
+                "branch": "Main Branch",
+                "email": "transporter@example.com",
+            },
+        )
+        validated_details = TransporterBankSchema(**bank_details).model_dump()
+        self.assertEqual(validated_details, bank_details)
+
+    def test_returns_all_keys_when_transport_has_no_transporter(self):
+        bank_details = serialize_transporter_bank(None)
+
+        self.assertEqual(
+            bank_details,
+            {
+                "transaction_type": None,
+                "account_number": None,
+                "account_name": None,
+                "ifsc_code": None,
+                "bank": None,
+                "branch": None,
+                "email": None,
+            },
+        )

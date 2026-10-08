@@ -118,6 +118,15 @@ class TransportListSchema(Schema):
     page_size: int = 100
 
 
+class TransportPaymentsListSchema(Schema):
+    transporter: Optional[int] = None
+    status: Optional[TransportStatus] = None
+    commodity: Optional[int] = None
+    billing_firm: Optional[int] = None
+    page: int = 1
+    page_size: int = 100
+
+
 class TransportSearchSchema(Schema):
     keyword: str
 
@@ -169,6 +178,20 @@ class TransportListOutSchema(TransportOutSchema):
     image_url: Optional[str] = None
 
 
+class TransporterBankSchema(Schema):
+    transaction_type: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    bank: Optional[str] = None
+    branch: Optional[str] = None
+    email: Optional[str] = None
+
+
+class TransportPaymentsListOutSchema(TransportListOutSchema):
+    transporter_bank: TransporterBankSchema
+
+
 class TransportDetailResponseSchema(Schema):
     success: bool
     data: TransportOutSchema
@@ -185,6 +208,19 @@ class TransportPageSchema(Schema):
 class TransportListResponseSchema(Schema):
     success: bool
     data: TransportPageSchema
+
+
+class TransportPaymentsPageSchema(Schema):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    results: list[TransportPaymentsListOutSchema]
+
+
+class TransportPaymentsListResponseSchema(Schema):
+    success: bool
+    data: TransportPaymentsPageSchema
 
 
 class TransportSearchResponseSchema(Schema):

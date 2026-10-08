@@ -58,6 +58,7 @@ def serialize_bulk_transport(bulk_transport: BulkTransport):
         "id": bulk_transport.id,
         "title": bulk_transport.title,
         "loading_date": bulk_transport.loading_date,
+        "total_rcvd_wt": bulk_transport.total_rcvd_wt,
         "bill_no": bulk_transport.bill_no,
         "order": bulk_transport.order_id,
         "billing_firm": bulk_transport.billing_firm_id,
@@ -379,6 +380,8 @@ def add_bulk_transport(request, data: Form[BulkTransportCreateSchema]):
         validate_bulk_create(data)
         common_values = resolve_bulk_common_values(data)
         bulk_order = BulkTransport(title=data.title, c_by=request.auth)
+        if data.total_rcvd_wt is not None:
+            bulk_order.total_rcvd_wt = data.total_rcvd_wt
         save_bulk_common_values(bulk_order, common_values, request.auth)
 
         for index, transport_data in enumerate(data.transports):
@@ -413,6 +416,8 @@ def update_bulk_transport(request, data: Form[BulkTransportUpdateSchema]):
         common_values = resolve_bulk_common_values(data, bulk_order)
         if data.title is not None:
             bulk_order.title = data.title
+        if data.total_rcvd_wt is not None:
+            bulk_order.total_rcvd_wt = data.total_rcvd_wt
         save_bulk_common_values(bulk_order, common_values, request.auth)
         update_bulk_children(request, bulk_order, data, common_values)
 

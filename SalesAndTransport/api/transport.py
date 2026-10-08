@@ -33,6 +33,8 @@ from SalesAndTransport.schemas.transport import (
     TransportItemInputSchema,
     TransportListResponseSchema,
     TransportListSchema,
+    TransportPaymentsListResponseSchema,
+    TransportPaymentsListSchema,
     TransportSearchResponseSchema,
     TransportSearchSchema,
     TransportUpdateSchema,
@@ -142,6 +144,28 @@ def serialize_transport(transport: Transport, include_billing_firm_image: bool =
             transport.billing_firm,
         )
 
+    return data
+
+
+def serialize_transporter_bank(transporter: Transporter | None):
+    fields = (
+        "transaction_type",
+        "account_number",
+        "account_name",
+        "ifsc_code",
+        "bank",
+        "branch",
+        "email",
+    )
+    return {
+        field: getattr(transporter, field) if transporter is not None else None
+        for field in fields
+    }
+
+
+def serialize_transport_payment(transport: Transport):
+    data = serialize_transport(transport, include_billing_firm_image=True)
+    data["transporter_bank"] = serialize_transporter_bank(transport.transporter)
     return data
 
 
@@ -578,6 +602,55 @@ def list_transports(request, data: Form[TransportListSchema]):
             "results": [
                 serialize_transport(transport, include_billing_firm_image=True)
                 for transport in transports
+            ],
+        },
+    }
+
+
+@router.post(
+    "/payments/lst",
+    response={200: TransportPaymentsListResponseSchema, 400: dict},
+)
+def list_transport_payments(
+    request,
+    data: Form[TransportPaymentsListSchema],
+):
+    if data.page < 1 or data.page_size < 1 or data.page_size > 100:
+        return 400, {"success": False, "message": "Invalid pagination values."}
+
+    filters = {
+        key: value
+        for key, value in data.model_dump(
+            exclude_none=True,
+            exclude={"page", "page_size"},
+        ).items()
+    }
+    queryset = (
+        transport_queryset()
+        .prefetch_related(
+            Prefetch(
+                "billing_firm__profile_pictures",
+                queryset=BusinessClientProfilePicture.objects.filter(
+                    is_active=True,
+                ).order_by("-id"),
+                to_attr="active_profile_pictures",
+            )
+        )
+        .filter(is_active=True, bulk_transport__isnull=True, **filters)
+        .order_by("id")
+    )
+    total = queryset.count()
+    start = (data.page - 1) * data.page_size
+    transports = queryset[start : start + data.page_size]
+    return {
+        "success": True,
+        "data": {
+            "page": data.page,
+            "page_size": data.page_size,
+            "total": total,
+            "total_pages": (total + data.page_size - 1) // data.page_size,
+            "results": [
+                serialize_transport_payment(transport) for transport in transports
             ],
         },
     }
