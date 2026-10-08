@@ -10,7 +10,13 @@ from PIL import Image, ImageDraw
 from SalesAndTransport.api.master import (
     prepare_profile_picture,
     save_profile_picture,
+    select_all_clients,
+    select_firms,
     validate_content,
+)
+from SalesAndTransport.api.bills import (
+    BillTransportLookupSchema,
+    get_transport_by_bill,
 )
 from SalesAndTransport.api.transport import (
     serialize_billing_firm_image,
@@ -47,6 +53,159 @@ class TransporterMasterContentTests(TestCase):
 class BusinessClientMasterContentTests(TestCase):
     def test_accepts_maan_no_for_add_and_update_content(self):
         validate_content("businessclient", {"maan_no": "1234567890"})
+
+
+class BillTransportLookupTests(TestCase):
+    @patch("SalesAndTransport.api.bills.Transport.objects")
+    def test_returns_details_for_first_matching_transport(self, objects):
+        transport = SimpleNamespace(
+            from_client=SimpleNamespace(name="Origin"),
+            to_client=SimpleNamespace(name="Destination"),
+            vehicle_no="ABC-123",
+            gross_wt=Decimal("12.500"),
+            quantity_unit="quintal",
+            rent=Decimal("1500.00"),
+            rent_type="per_unit",
+        )
+        (
+            objects.filter.return_value.select_related.return_value
+            .order_by.return_value.first.return_value
+        ) = transport
+
+        result = get_transport_by_bill(
+            request=None,
+            data=BillTransportLookupSchema(billing_firm_id=2, bill_no="B-1"),
+        )
+
+        objects.filter.assert_called_once_with(
+            is_active=True,
+            billing_firm_id=2,
+            bill_no="B-1",
+        )
+        objects.filter.return_value.select_related.assert_called_once_with(
+            "from_client",
+            "to_client",
+        )
+        objects.filter.return_value.select_related.return_value.order_by.assert_called_once_with(
+            "id",
+        )
+        self.assertEqual(
+            result,
+            {
+                "from_client": "Origin",
+                "to_client": "Destination",
+                "vehicle_no": "ABC-123",
+                "gross_wt": Decimal("12.500"),
+                "gross_wt_unit": "quintal",
+                "rent": Decimal("1500.00"),
+                "rent_type": "per_unit",
+            },
+        )
+
+
+class SelectFirmsTests(TestCase):
+    @patch("SalesAndTransport.api.master.BusinessClient.objects")
+    @patch("SalesAndTransport.api.master.default_storage")
+    def test_only_returns_picture_url_when_file_exists(self, storage, objects):
+        firms = [
+            SimpleNamespace(
+                id=1,
+                name="Firm with picture",
+                active_profile_pictures=[
+                    SimpleNamespace(
+                        url="https://example.com/media/profile_picture/firm.jpg",
+                    ),
+                ],
+            ),
+            SimpleNamespace(
+                id=2,
+                name="Firm with missing picture file",
+                active_profile_pictures=[
+                    SimpleNamespace(
+                        url="https://example.com/media/profile_picture/missing.jpg",
+                    ),
+                ],
+            ),
+            SimpleNamespace(
+                id=3,
+                name="Firm without picture record",
+                active_profile_pictures=[],
+            ),
+        ]
+        (
+            objects.filter.return_value.prefetch_related.return_value.order_by.return_value
+        ) = firms
+        storage.exists.side_effect = [True, False]
+
+        result = select_firms(request=None)
+
+        objects.filter.assert_called_once_with(
+            is_active=True,
+            type="my_firm",
+        )
+        self.assertEqual(
+            result["data"],
+            [
+                {
+                    "id": 1,
+                    "name": "Firm with picture",
+                    "profile_picture": (
+                        "https://example.com/media/profile_picture/firm.jpg"
+                    ),
+                },
+                {
+                    "id": 2,
+                    "name": "Firm with missing picture file",
+                    "profile_picture": None,
+                },
+                {
+                    "id": 3,
+                    "name": "Firm without picture record",
+                    "profile_picture": None,
+                },
+            ],
+        )
+        self.assertEqual(
+            [call.args[0] for call in storage.exists.call_args_list],
+            [
+                "profile_picture/firm.jpg",
+                "profile_picture/missing.jpg",
+            ],
+        )
+
+
+class SelectAllClientsTests(TestCase):
+    @patch("SalesAndTransport.api.master.BusinessClient.objects")
+    def test_returns_requested_fields_for_active_clients_of_all_types(self, objects):
+        clients = [
+            {
+                "id": 1,
+                "name": "Company Client",
+                "type": "company",
+                "maan_no": "12345",
+                "city": "Mumbai",
+            },
+            {
+                "id": 2,
+                "name": "Godown Client",
+                "type": "other_godown",
+                "maan_no": None,
+                "city": None,
+            },
+        ]
+        objects.filter.return_value.order_by.return_value.values.return_value = clients
+
+        result = select_all_clients(request=None)
+
+        objects.filter.assert_called_once_with(is_active=True)
+        objects.filter.return_value.order_by.return_value.values.assert_called_once_with(
+            "id",
+            "name",
+            "type",
+            "maan_no",
+            "city",
+        )
+        self.assertEqual(result["data"], clients)
 
 
 class PrepareProfilePictureTests(TestCase):

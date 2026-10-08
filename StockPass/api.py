@@ -13,6 +13,7 @@ from SalesAndTransport.api.order import router as order_router
 from SalesAndTransport.api.transport import router as transport_router
 from SalesAndTransport.api.bulk_transport import router as bulk_transport_router
 from SalesAndTransport.api.dashboard import router as dashboard_router
+from SalesAndTransport.api.bills import router as bills_router
 
 
 api = NinjaAPI(
@@ -57,4 +58,4 @@ api.add_router("/orders/", order_router)
 api.add_router("/transports/", transport_router)
 api.add_router("/bulk-transports/", bulk_transport_router)
 api.add_router("/dashboard/", dashboard_router)
-
+api.add_router("/bills/", bills_router)

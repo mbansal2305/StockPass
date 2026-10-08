@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Prefetch
 from django.db import transaction
 from django.forms.models import model_to_dict
 from django.forms import ImageField
@@ -656,6 +657,72 @@ def select_commodities(request):
         "success": True,
         "entity": "broker",
         "data": list(commodities),
+    }
+
+
+@router.get("/sel/firms/", response={200: dict})
+def select_firms(request):
+    firms = (
+        BusinessClient.objects.filter(
+            is_active=True,
+            type=BusinessClient.ClientType.MY_FIRM,
+        )
+        .prefetch_related(
+            Prefetch(
+                "profile_pictures",
+                queryset=BusinessClientProfilePicture.objects.filter(
+                    is_active=True,
+                ).order_by("-id"),
+                to_attr="active_profile_pictures",
+            )
+        )
+        .order_by("id")
+    )
+    data = []
+    for firm in firms:
+        picture_url = (
+            firm.active_profile_pictures[0].url
+            if firm.active_profile_pictures
+            else None
+        )
+        storage_path = (
+            profile_picture_storage_path(picture_url)
+            if picture_url is not None
+            else None
+        )
+        if storage_path is None or not default_storage.exists(storage_path):
+            picture_url = None
+
+        data.append(
+            {
+                "id": firm.id,
+                "name": firm.name,
+                "address" : firm.address,
+                "city" : firm.city,
+                "pincode" : firm.pincode,
+                "profile_picture": picture_url,
+            }
+        )
+
+    return {
+        "success": True,
+        "entity": "businessclient",
+        "data": data,
+    }
+
+
+@router.get("/sel/allclients/", response={200: dict})
+def select_all_clients(request):
+    clients = (
+        BusinessClient.objects.filter(is_active=True)
+        .order_by("id")
+        .values("id", "name", "type", "maan_no", "city")
+    )
+
+    return {
+        "success": True,
+        "entity": "businessclient",
+        "data": list(clients),
     }
 
 

@@ -708,7 +708,7 @@ def select_client_firms(request):
     clients = BusinessClient.objects.filter(
         is_active=True,
         type=BusinessClient.ClientType.MY_FIRM,
-    ).order_by("name", "id").values("id", "name", "type", "city")
+    ).order_by("name", "id").values("id", "name", "type", "city", "address", "pincode")
     return {"success": True, "data": list(clients)}
 
 
