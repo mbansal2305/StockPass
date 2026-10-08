@@ -37,6 +37,7 @@ from SalesAndTransport.schemas.transport import (
     TransportPaymentsListSchema,
     TransportSearchResponseSchema,
     TransportSearchSchema,
+    TransportStatusUpdateSchema,
     TransportUpdateSchema,
 )
 
@@ -69,10 +70,17 @@ def transport_model_values(values: dict):
 
 
 def serialize_transport_item(item: TransportItems):
+    order = item.order
     return {
         "id": item.id,
         "order_id": item.order_id,
-        "order": item.order.order_no if item.order else None,
+        "order": order.order_no if order else None,
+        "order_type": order.type if order else None,
+        "order_size": order.quantity if order else None,
+        "order_size_rem" : (order.quantity - order.quantity_fulfilled) if order else None,
+        "order_size_unit": order.quantity_unit if order else None,
+        "order_commodity": order.commodity.name if order else None,
+        "order_commodity_type": order.commodity.type if order else None,
         "quantity": item.quantity,
         "order_entry": item.order_quantity,
     }
@@ -106,21 +114,26 @@ def serialize_transport(transport: Transport, include_billing_firm_image: bool =
     data = {
         "id": transport.id,
         "billing_firm": transport.billing_firm.name,
+        "billing_firm_id": transport.billing_firm_id,
         "bill_no": transport.bill_no,
         "bulk_transport": (
             transport.bulk_transport.title if transport.bulk_transport else None
         ),
         "commodity": transport.commodity.name,
+        "commodity_id": transport.commodity_id,
         "commodity_type": transport.commodity.type,
         "loading_date" : transport.loading_date,
         "from_client": transport.from_client.name if transport.from_client else None,
+        "from_client_id": transport.from_client_id,
         "to_client": transport.to_client.name if transport.to_client else None,
+        "to_client_id": transport.to_client_id,
         "gross_wt": transport.gross_wt,
         "gross_wt_unit": transport.quantity_unit,
         "bag_nos": transport.bag_nos,
         "bag_wt": transport.bag_wt,
         "vehicle_no": transport.vehicle_no,
         "transporter": transport.transporter.name if transport.transporter else None,
+        "transporter_id": transport.transporter_id,
         "anugya": transport.anugya,
         "gatepass": transport.gatepass,
         "unload_date": transport.unload_date,
@@ -170,7 +183,9 @@ def serialize_transport_payment(transport: Transport):
 
 
 def transport_queryset():
-    active_items = TransportItems.objects.filter(is_active=True).select_related("order")
+    active_items = TransportItems.objects.filter(is_active=True).select_related(
+        "order__commodity",
+    )
     return Transport.objects.select_related(
         "billing_firm",
         "bulk_transport",
@@ -535,6 +550,21 @@ def update_transport(
         return 400, {"success": False, "message": str(error)}
 
 
+@router.patch("/status/upd", response={200: dict})
+@transaction.atomic
+def update_transport_status(request, data: Form[TransportStatusUpdateSchema]):
+    transport = get_object_or_404(Transport, id=data.id, is_active=True)
+    transport.status = data.status
+    transport.m_by = request.auth
+    transport.save(update_fields=["status", "m_by", "m_at"])
+
+    return {
+        "success": True,
+        "message": "transport status updated successfully.",
+        "data": {"id": transport.id, "status": transport.status},
+    }
+
+
 @router.get("/get/", response={200: TransportDetailResponseSchema})
 def get_transport(request, data: Query[TransportGetDeleteSchema]):
     transport = get_object_or_404(
@@ -750,3 +780,4 @@ def select_transporters(request):
         is_active=True,
     ).order_by("name", "id").values("id", "name", "agency", "city")
     return {"success": True, "data": list(transporters)}
+

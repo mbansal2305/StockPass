@@ -634,6 +634,31 @@ def list_entities(request, data: MasterListSchema):
 # SELECT
 # =========================================================
 
+@router.get("/sel/commodity/", response={200: dict})
+def select_commodities(request):
+    commodities = Commodity.objects.filter(
+        is_active=True,
+    ).order_by("id").values("id", "name", "type")
+
+    return {
+        "success": True,
+        "entity": "commodity",
+        "data": list(commodities),
+    }
+
+@router.get("/sel/broker/", response={200: dict})
+def select_commodities(request):
+    commodities = Broker.objects.filter(
+        is_active=True,
+    ).order_by("id").values("id", "name", "city")
+
+    return {
+        "success": True,
+        "entity": "broker",
+        "data": list(commodities),
+    }
+
+
 @router.post("/sel/", response={200: dict, 400: dict})
 def select_entities(request, data: MasterSelectSchema):
 

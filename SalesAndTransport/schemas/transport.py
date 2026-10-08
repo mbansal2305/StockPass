@@ -109,6 +109,11 @@ class TransportGetDeleteSchema(Schema):
     id: int
 
 
+class TransportStatusUpdateSchema(Schema):
+    id: int
+    status: TransportStatus
+
+
 class TransportListSchema(Schema):
     transporter: Optional[int] = None
     status: Optional[TransportStatus] = None
@@ -135,6 +140,12 @@ class TransportItemOutSchema(Schema):
     id: int
     order_id: Optional[int]
     order: Optional[str]
+    order_type: Optional[str] = None
+    order_size: Optional[Decimal] = None
+    order_size_rem: Optional[Decimal] = None
+    order_size_unit: Optional[str] = None
+    order_commodity: Optional[str] = None
+    order_commodity_type: Optional[str] = None
     quantity: Decimal
     order_entry: Decimal
 
@@ -142,19 +153,24 @@ class TransportItemOutSchema(Schema):
 class TransportOutSchema(Schema):
     id: int
     billing_firm: str
+    billing_firm_id: int
     bill_no: Optional[str]
     bulk_transport: Optional[str]
     commodity: str
+    commodity_id: Optional[int]
     commodity_type : Optional[str]
     loading_date: Optional[date]
     from_client: Optional[str]
+    from_client_id: Optional[int]
     to_client: Optional[str]
+    to_client_id: Optional[int]
     gross_wt: Decimal
     gross_wt_unit: str
     bag_nos: Decimal
     bag_wt: Decimal
     vehicle_no: Optional[str]
     transporter: Optional[str]
+    transporter_id: Optional[int]
     anugya: bool
     gatepass: bool
     unload_date: Optional[date]

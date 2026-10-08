@@ -5,14 +5,22 @@ from django.conf import settings
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from ninja import Router
+from ninja import Query, Router
 
 from StockPassCore.auth.permissions import OwnerAdminAuth
-from SalesAndTransport.models import BusinessClient, Order, PurchaseOrderSequence
+from SalesAndTransport.models import (
+    BusinessClient,
+    Order,
+    PurchaseOrderSequence,
+    TransportItems,
+)
 from SalesAndTransport.api.transport import recalculate_order_fulfillment
 from SalesAndTransport.schemas.order import (
     OrderCreateSchema,
+    OrderDetailResponseSchema,
     OrderListSchema,
+    OrderListResponseSchema,
+    OrderMutationResponseSchema,
     OrderSelectSchema,
     OrderStatusUpdateSchema,
     OrderUpdateSchema,
@@ -29,8 +37,12 @@ def serialize_order(order: Order):
         "type": order.type,
         "order_no": order.order_no,
         "from_client": order.from_client.name if order.from_client else None,
+        "from_client_id": order.from_client_id,
         "to_client": order.to_client.name if order.to_client else None,
+        "to_client_id": order.to_client_id,
         "commodity": order.commodity.name,
+        "commodity_id": order.commodity_id,
+        "commodity_type" : order.commodity.type,
         "rate": order.rate,
         "quantity": order.quantity,
         "quantity_unit": order.quantity_unit,
@@ -39,6 +51,7 @@ def serialize_order(order: Order):
         "contract_date": order.contract_date,
         "quantity_fulfilled": order.quantity_fulfilled,
         "broker": order.broker.name if order.broker else None,
+        "broker_id": order.broker_id,
         "status": order.status,
         "notes": order.notes,
         "is_active": order.is_active,
@@ -53,6 +66,7 @@ def serialize_order_selection(order: Order):
         "to_client": order.to_client.name if order.to_client else None,
         "type": order.type,
         "commodity": order.commodity.name,
+        "id" : order.id
     }
 
 
@@ -190,7 +204,7 @@ def select_purchase_order_clients(request):
     }
 
 
-@router.post("/add/", response={200: dict, 400: dict})
+@router.post("/add/", response={200: OrderMutationResponseSchema, 400: dict})
 @transaction.atomic
 def add_order(request, data: OrderCreateSchema):
     try:
@@ -220,7 +234,7 @@ def add_order(request, data: OrderCreateSchema):
         return 400, {"success": False, "message": str(error)}
 
 
-@router.patch("/upd/", response={200: dict, 400: dict})
+@router.patch("/upd/", response={200: OrderMutationResponseSchema, 400: dict})
 @transaction.atomic
 def update_order(request, data: OrderUpdateSchema):
     try:
@@ -273,8 +287,8 @@ def update_order_status(request, data: OrderStatusUpdateSchema):
     }
 
 
-@router.get("/get/")
-def get_order(request, data: OrderGetDeleteSchema):
+@router.get("/get/", response=OrderDetailResponseSchema)
+def get_order(request, data: Query[OrderGetDeleteSchema]):
     order = get_object_or_404(
         Order.objects.select_related(
             "from_client",
@@ -285,9 +299,39 @@ def get_order(request, data: OrderGetDeleteSchema):
         id=data.id,
         is_active=True,
     )
+    order_data = serialize_order(order)
+    order_data["order_transports"] = [
+        {
+            "id": item.transport.id,
+            "bill_no": item.transport.bill_no,
+            "billing_firm": item.transport.billing_firm.name,
+            "loading_date": item.transport.loading_date,
+            "unload_date": item.transport.unload_date,
+            "vehicle_no": item.transport.vehicle_no,
+            "transporter": (
+                item.transport.transporter.name
+                if item.transport.transporter
+                else None
+            ),
+            "gross_wt_unit": item.transport.quantity_unit,
+            "quantity": item.quantity,
+            "order_entry": item.order_quantity,
+            "status": item.transport.status,
+        }
+        for item in TransportItems.objects.filter(
+            order=order,
+            is_active=True,
+            transport__is_active=True,
+        )
+        .select_related(
+            "transport__billing_firm",
+            "transport__transporter",
+        )
+        .order_by("transport_id", "id")
+    ]
     return {
         "success": True,
-        "data": serialize_order(order),
+        "data": order_data,
     }
 
 
@@ -306,7 +350,7 @@ def delete_order(request, data: OrderGetDeleteSchema):
     }
 
 
-@router.post("/lst/", response={200: dict, 400: dict})
+@router.post("/lst/", response={200: OrderListResponseSchema, 400: dict})
 def list_orders(request, data: OrderListSchema):
     try:
         queryset = active_orders(get_filters(data)).order_by("id")
@@ -322,18 +366,4 @@ def list_orders(request, data: OrderListSchema):
     except ValueError as error:
         return 400, {"success": False, "message": str(error)}
 
-
-@router.post("/sel/", response={200: dict, 400: dict})
-def select_orders(request, data: OrderSelectSchema):
-    try:
-        queryset = active_orders(get_filters(data)).order_by("order_no", "id")
-        return {
-            "success": True,
-            "data": [
-                serialize_order_selection(order)
-                for order in queryset
-            ],
-        }
-    except ValueError as error:
-        return 400, {"success": False, "message": str(error)}
 

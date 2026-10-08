@@ -73,3 +73,70 @@ class OrderSelectSchema(Schema):
     from_client: Optional[int] = None
     to_client: Optional[int] = None
     type: Optional[OrderType] = None
+
+
+class OrderOutSchema(Schema):
+    id: int
+    type: OrderType
+    order_no: Optional[str]
+    from_client: Optional[str]
+    from_client_id: Optional[int]
+    to_client: Optional[str]
+    to_client_id: Optional[int]
+    commodity: str
+    commodity_id: int
+    commodity_type: Optional[str]
+    rate: Decimal
+    quantity: Decimal
+    quantity_unit: QuantityUnit
+    start_date: Optional[date]
+    expiry_date: Optional[date]
+    contract_date: Optional[date]
+    quantity_fulfilled: Decimal
+    broker: Optional[str]
+    broker_id: Optional[int]
+    status: OrderStatus
+    notes: Optional[str]
+    is_active: bool
+
+
+class OrderTransportOutSchema(Schema):
+    id: int
+    bill_no: Optional[str]
+    billing_firm: str
+    loading_date: Optional[date]
+    unload_date: Optional[date]
+    vehicle_no: Optional[str]
+    transporter: Optional[str]
+    gross_wt_unit: QuantityUnit
+    quantity: Decimal
+    order_entry: Decimal
+    status: str
+
+
+class OrderDetailOutSchema(OrderOutSchema):
+    order_transports: list[OrderTransportOutSchema]
+
+
+class OrderMutationResponseSchema(Schema):
+    success: bool
+    message: str
+    data: OrderOutSchema
+
+
+class OrderDetailResponseSchema(Schema):
+    success: bool
+    data: OrderDetailOutSchema
+
+
+class OrderPageSchema(Schema):
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
+    results: list[OrderOutSchema]
+
+
+class OrderListResponseSchema(Schema):
+    success: bool
+    data: OrderPageSchema

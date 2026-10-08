@@ -1,4 +1,5 @@
 import base64
+from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -13,10 +14,16 @@ from SalesAndTransport.api.master import (
 )
 from SalesAndTransport.api.transport import (
     serialize_billing_firm_image,
+    serialize_transport,
     serialize_transporter_bank,
+    update_transport_status,
 )
+from SalesAndTransport.api.order import serialize_order
+from SalesAndTransport.schemas.order import OrderOutSchema
 from SalesAndTransport.schemas.transport import (
     TransportPaymentsListSchema,
+    TransportStatusUpdateSchema,
+    TransportOutSchema,
     TransporterBankSchema,
 )
 
@@ -157,6 +164,143 @@ class TransportPaymentsListSchemaTests(TestCase):
         self.assertEqual(data.status, "paid")
         self.assertEqual(data.page, 1)
         self.assertEqual(data.page_size, 100)
+
+
+class TransportStatusUpdateTests(TestCase):
+    def test_schema_accepts_only_allowed_statuses(self):
+        for status in ("pending", "delivery", "finance", "paid", "draft"):
+            with self.subTest(status=status):
+                data = TransportStatusUpdateSchema(id=12, status=status)
+                self.assertEqual(data.status, status)
+
+        with self.assertRaises(ValueError):
+            TransportStatusUpdateSchema(id=12, status="completed")
+
+    @patch("SalesAndTransport.api.transport.get_object_or_404")
+    def test_updates_status_and_modification_metadata(self, get_transport):
+        user = object()
+        transport = SimpleNamespace(id=12, status="pending", save=Mock())
+        get_transport.return_value = transport
+        request = SimpleNamespace(auth=user)
+
+        response = update_transport_status(
+            request,
+            TransportStatusUpdateSchema(id=12, status="paid"),
+        )
+
+        get_transport.assert_called_once()
+        self.assertEqual(transport.status, "paid")
+        self.assertIs(transport.m_by, user)
+        transport.save.assert_called_once_with(
+            update_fields=["status", "m_by", "m_at"],
+        )
+        self.assertEqual(
+            response["data"],
+            {"id": 12, "status": "paid"},
+        )
+
+
+class SerializeTransportForeignKeyTests(TestCase):
+    def test_serializes_foreign_key_ids(self):
+        transport = SimpleNamespace(
+            id=1,
+            billing_firm=SimpleNamespace(name="Firm"),
+            billing_firm_id=2,
+            bill_no="B-1",
+            bulk_transport=None,
+            commodity=SimpleNamespace(name="Wheat", type=None),
+            commodity_id=3,
+            loading_date=None,
+            from_client=SimpleNamespace(name="From client"),
+            from_client_id=4,
+            to_client=SimpleNamespace(name="To client"),
+            to_client_id=5,
+            gross_wt=0,
+            quantity_unit="quintal",
+            bag_nos=0,
+            bag_wt=0,
+            vehicle_no=None,
+            transporter=SimpleNamespace(name="Transporter"),
+            transporter_id=6,
+            anugya=False,
+            gatepass=False,
+            unload_date=None,
+            rcvd_wt=0,
+            rent_type="per_unit",
+            rent=0,
+            adv_by_client=0,
+            adv_by_firm=0,
+            final_paid=0,
+            extra_paid=0,
+            shortage=0,
+            status="pending",
+            notes=None,
+            wt_rcpt_src=None,
+            wt_rcpt_dst=None,
+            items=SimpleNamespace(all=lambda: []),
+        )
+
+        data = serialize_transport(transport)
+        response = TransportOutSchema(**data)
+
+        self.assertEqual(
+            {
+                field: getattr(response, field)
+                for field in (
+                    "billing_firm_id",
+                    "commodity_id",
+                    "from_client_id",
+                    "to_client_id",
+                    "transporter_id",
+                )
+            },
+            {
+                "billing_firm_id": 2,
+                "commodity_id": 3,
+                "from_client_id": 4,
+                "to_client_id": 5,
+                "transporter_id": 6,
+            },
+        )
+
+
+class SerializeOrderForeignKeyTests(TestCase):
+    def test_serializes_foreign_key_ids_in_response_schema(self):
+        order = SimpleNamespace(
+            id=1,
+            type="sales_order",
+            order_no="SO-1",
+            from_client=SimpleNamespace(name="From client"),
+            from_client_id=2,
+            to_client=SimpleNamespace(name="To client"),
+            to_client_id=3,
+            commodity=SimpleNamespace(name="Wheat", type="grain"),
+            commodity_id=4,
+            rate=Decimal("12.50"),
+            quantity=Decimal("10"),
+            quantity_unit="quintal",
+            start_date=None,
+            expiry_date=None,
+            contract_date=None,
+            quantity_fulfilled=Decimal("0"),
+            broker=SimpleNamespace(name="Broker"),
+            broker_id=5,
+            status="pending",
+            notes=None,
+            is_active=True,
+        )
+
+        response = OrderOutSchema(**serialize_order(order))
+
+        self.assertEqual(
+            (
+                response.from_client_id,
+                response.to_client_id,
+                response.broker_id,
+                response.commodity_id,
+            ),
+            (2, 3, 5, 4),
+        )
 
 
 class SerializeTransporterBankTests(TestCase):
