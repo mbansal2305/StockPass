@@ -59,6 +59,8 @@ class BillTransportLookupTests(TestCase):
     @patch("SalesAndTransport.api.bills.Transport.objects")
     def test_returns_details_for_first_matching_transport(self, objects):
         transport = SimpleNamespace(
+            billing_firm=SimpleNamespace(name="Goyal and Co."),
+            bill_no="B-1",
             from_client=SimpleNamespace(name="Origin"),
             to_client=SimpleNamespace(name="Destination"),
             vehicle_no="ABC-123",
@@ -83,6 +85,7 @@ class BillTransportLookupTests(TestCase):
             bill_no="B-1",
         )
         objects.filter.return_value.select_related.assert_called_once_with(
+            "billing_firm",
             "from_client",
             "to_client",
         )
@@ -97,6 +100,8 @@ class BillTransportLookupTests(TestCase):
                 "vehicle_no": "ABC-123",
                 "gross_wt": Decimal("12.500"),
                 "gross_wt_unit": "quintal",
+                "billing_firm": "Goyal and Co.",
+                "bill_no": "B-1",
                 "rent": Decimal("1500.00"),
                 "rent_type": "per_unit",
             },

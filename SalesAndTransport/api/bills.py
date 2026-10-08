@@ -35,7 +35,7 @@ def get_transport_by_bill(request, data: BillTransportLookupSchema):
             billing_firm_id=data.billing_firm_id,
             bill_no=data.bill_no,
         )
-        .select_related("from_client", "to_client")
+        .select_related("billing_firm", "from_client", "to_client")
         .order_by("id")
         .first()
     )
@@ -48,7 +48,7 @@ def get_transport_by_bill(request, data: BillTransportLookupSchema):
         "vehicle_no": transport.vehicle_no,
         "gross_wt": transport.gross_wt,
         "gross_wt_unit": transport.quantity_unit,
-        "billing_firm" : transport.billing_firm,
+        "billing_firm": transport.billing_firm.name,
         "bill_no" : transport.bill_no,
         "rent": transport.rent,
         "rent_type": transport.rent_type,
