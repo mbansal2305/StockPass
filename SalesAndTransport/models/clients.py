@@ -50,6 +50,25 @@ class BusinessClient(BaseModel):
         null=True,
     )
 
+    contact_name = models.CharField(
+        max_length=50,
+        db_index=True,
+        blank=True,
+        null=True,
+    )
+
+    pri_contact = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+    )
+
+    sec_contact = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+    )
+
     type = models.CharField(
         max_length=30,
         choices=ClientType.choices,

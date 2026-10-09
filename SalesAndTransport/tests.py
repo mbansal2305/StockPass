@@ -59,6 +59,19 @@ class BusinessClientMasterContentTests(TestCase):
     def test_accepts_maan_no_for_add_and_update_content(self):
         validate_content("businessclient", {"maan_no": "1234567890"})
 
+    def test_accepts_optional_contact_fields_for_add_and_update_content(self):
+        validate_content(
+            "businessclient",
+            {
+                "contact_name": "Alex Example",
+                "pri_contact": "1234567890",
+                "sec_contact": "0987654321",
+            },
+        )
+
+    def test_contact_fields_can_be_omitted(self):
+        validate_content("businessclient", {})
+
 
 class BillTransportLookupTests(TestCase):
     @patch("SalesAndTransport.api.bills.Transport.objects")
