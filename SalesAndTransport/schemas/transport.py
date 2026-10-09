@@ -115,19 +115,27 @@ class TransportStatusUpdateSchema(Schema):
 
 
 class TransportListSchema(Schema):
-    transporter: Optional[int] = None
+    transporter: Optional[list[int]] = None
     status: Optional[TransportStatus] = None
-    commodity: Optional[int] = None
-    billing_firm: Optional[int] = None
+    commodity: Optional[list[int]] = None
+    billing_firm: Optional[list[int]] = None
+    party: Optional[list[int]] = None
+    loading_start_date: Optional[date] = None
+    loading_end_date: Optional[date] = None
+    search: Optional[str] = None
     page: int = 1
     page_size: int = 100
 
 
 class TransportPaymentsListSchema(Schema):
-    transporter: Optional[int] = None
+    transporter: Optional[list[int]] = None
     status: Optional[TransportStatus] = None
-    commodity: Optional[int] = None
-    billing_firm: Optional[int] = None
+    commodity: Optional[list[int]] = None
+    billing_firm: Optional[list[int]] = None
+    party: Optional[list[int]] = None
+    loading_start_date: Optional[date] = None
+    loading_end_date: Optional[date] = None
+    search: Optional[str] = None
     page: int = 1
     page_size: int = 100
 

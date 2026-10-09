@@ -594,17 +594,10 @@ def delete_transport(request, data: TransportGetDeleteSchema):
 
 
 @router.post("/lst", response={200: TransportListResponseSchema, 400: dict})
-def list_transports(request, data: Form[TransportListSchema]):
+def list_transports(request, data: TransportListSchema):
     if data.page < 1 or data.page_size < 1 or data.page_size > 100:
         return 400, {"success": False, "message": "Invalid pagination values."}
 
-    filters = {
-        key: value
-        for key, value in data.model_dump(
-            exclude_none=True,
-            exclude={"page", "page_size"},
-        ).items()
-    }
     queryset = (
         transport_queryset()
         .prefetch_related(
@@ -616,9 +609,35 @@ def list_transports(request, data: Form[TransportListSchema]):
                 to_attr="active_profile_pictures",
             )
         )
-        .filter(is_active=True, bulk_transport__isnull=True, **filters)
-        .order_by("id")
+        .filter(is_active=True, bulk_transport__isnull=True)
     )
+    if data.transporter:
+        queryset = queryset.filter(transporter_id__in=data.transporter)
+    if data.status is not None:
+        queryset = queryset.filter(status=data.status)
+    if data.commodity:
+        queryset = queryset.filter(commodity_id__in=data.commodity)
+    if data.billing_firm:
+        queryset = queryset.filter(billing_firm_id__in=data.billing_firm)
+    if data.party:
+        queryset = queryset.filter(
+            Q(from_client_id__in=data.party) | Q(to_client_id__in=data.party)
+        )
+    if data.loading_start_date is not None:
+        queryset = queryset.filter(loading_date__gte=data.loading_start_date)
+    if data.loading_end_date is not None:
+        queryset = queryset.filter(loading_date__lte=data.loading_end_date)
+    keyword = data.search.strip() if data.search else ""
+    if keyword:
+        queryset = queryset.filter(
+            Q(bill_no__icontains=keyword)
+            | Q(vehicle_no__icontains=keyword)
+            | Q(
+                items__is_active=True,
+                items__order__order_no__icontains=keyword,
+            )
+        ).distinct()
+    queryset = queryset.order_by("id")
     total = queryset.count()
     start = (data.page - 1) * data.page_size
     transports = queryset[start : start + data.page_size]
@@ -643,18 +662,11 @@ def list_transports(request, data: Form[TransportListSchema]):
 )
 def list_transport_payments(
     request,
-    data: Form[TransportPaymentsListSchema],
+    data: TransportPaymentsListSchema,
 ):
     if data.page < 1 or data.page_size < 1 or data.page_size > 100:
         return 400, {"success": False, "message": "Invalid pagination values."}
 
-    filters = {
-        key: value
-        for key, value in data.model_dump(
-            exclude_none=True,
-            exclude={"page", "page_size"},
-        ).items()
-    }
     queryset = (
         transport_queryset()
         .prefetch_related(
@@ -666,9 +678,35 @@ def list_transport_payments(
                 to_attr="active_profile_pictures",
             )
         )
-        .filter(is_active=True, bulk_transport__isnull=True, **filters)
-        .order_by("id")
+        .filter(is_active=True, bulk_transport__isnull=True)
     )
+    if data.transporter:
+        queryset = queryset.filter(transporter_id__in=data.transporter)
+    if data.status is not None:
+        queryset = queryset.filter(status=data.status)
+    if data.commodity:
+        queryset = queryset.filter(commodity_id__in=data.commodity)
+    if data.billing_firm:
+        queryset = queryset.filter(billing_firm_id__in=data.billing_firm)
+    if data.party:
+        queryset = queryset.filter(
+            Q(from_client_id__in=data.party) | Q(to_client_id__in=data.party)
+        )
+    if data.loading_start_date is not None:
+        queryset = queryset.filter(loading_date__gte=data.loading_start_date)
+    if data.loading_end_date is not None:
+        queryset = queryset.filter(loading_date__lte=data.loading_end_date)
+    keyword = data.search.strip() if data.search else ""
+    if keyword:
+        queryset = queryset.filter(
+            Q(bill_no__icontains=keyword)
+            | Q(vehicle_no__icontains=keyword)
+            | Q(
+                items__is_active=True,
+                items__order__order_no__icontains=keyword,
+            )
+        ).distinct()
+    queryset = queryset.order_by("id")
     total = queryset.count()
     start = (data.page - 1) * data.page_size
     transports = queryset[start : start + data.page_size]
@@ -780,4 +818,3 @@ def select_transporters(request):
         is_active=True,
     ).order_by("name", "id").values("id", "name", "agency", "city")
     return {"success": True, "data": list(transporters)}
-

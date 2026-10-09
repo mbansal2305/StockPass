@@ -60,12 +60,14 @@ class OrderListSchema(Schema):
     status: Optional[OrderStatus] = None
     contract_date_from: Optional[date] = None
     contract_date_to: Optional[date] = None
-    from_client: Optional[int] = None
-    to_client: Optional[int] = None
+    from_client: Optional[list[int]] = None
+    to_client: Optional[list[int]] = None
     type: Optional[OrderType] = None
-    broker: Optional[int] = None
+    broker: Optional[list[int]] = None
+    commodity: Optional[list[int]] = None
+    search: Optional[str] = None
     page: int = 1
-    page_size: int = 10
+    page_size: int = 100
 
 
 class OrderSelectSchema(Schema):

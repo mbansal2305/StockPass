@@ -1,9 +1,11 @@
 import base64
+from datetime import date
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
+from django.db.models import Q
 from django.test import TestCase
 from PIL import Image, ImageDraw
 
@@ -19,14 +21,17 @@ from SalesAndTransport.api.bills import (
     get_transport_by_bill,
 )
 from SalesAndTransport.api.transport import (
+    list_transport_payments,
+    list_transports,
     serialize_billing_firm_image,
     serialize_transport,
     serialize_transporter_bank,
     update_transport_status,
 )
-from SalesAndTransport.api.order import serialize_order
-from SalesAndTransport.schemas.order import OrderOutSchema
+from SalesAndTransport.api.order import get_filters, serialize_order
+from SalesAndTransport.schemas.order import OrderListSchema, OrderOutSchema
 from SalesAndTransport.schemas.transport import (
+    TransportListSchema,
     TransportPaymentsListSchema,
     TransportStatusUpdateSchema,
     TransportOutSchema,
@@ -320,15 +325,189 @@ class SerializeBillingFirmImageTests(TestCase):
         self.assertIsNone(image_url)
 
 
-class TransportPaymentsListSchemaTests(TestCase):
-    def test_has_its_own_filters_and_pagination_defaults(self):
-        data = TransportPaymentsListSchema(transporter=12, status="paid")
+class TransportListSchemaTests(TestCase):
+    def test_has_list_filters_and_pagination_defaults(self):
+        data = TransportListSchema(
+            transporter=[12, 13],
+            status="paid",
+            commodity=[4, 5],
+            billing_firm=[7, 8],
+            party=[9, 10],
+            loading_start_date=date(2025, 1, 1),
+            loading_end_date=date(2025, 1, 31),
+            search=" SO-2025 ",
+        )
 
-        self.assertEqual(data.transporter, 12)
+        self.assertEqual(data.transporter, [12, 13])
         self.assertEqual(data.status, "paid")
+        self.assertEqual(data.commodity, [4, 5])
+        self.assertEqual(data.billing_firm, [7, 8])
+        self.assertEqual(data.party, [9, 10])
+        self.assertEqual(data.loading_start_date, date(2025, 1, 1))
+        self.assertEqual(data.loading_end_date, date(2025, 1, 31))
+        self.assertEqual(data.search, " SO-2025 ")
         self.assertEqual(data.page, 1)
         self.assertEqual(data.page_size, 100)
 
+    @patch("SalesAndTransport.api.transport.transport_queryset")
+    def test_applies_filters_and_search_without_changing_response(self, get_queryset):
+        queryset = MagicMock()
+        get_queryset.return_value.prefetch_related.return_value = queryset
+        queryset.filter.return_value = queryset
+        queryset.distinct.return_value = queryset
+        queryset.order_by.return_value = queryset
+        queryset.count.return_value = 0
+        queryset.__getitem__.return_value = []
+        data = TransportListSchema(
+            transporter=[12, 13],
+            status="paid",
+            commodity=[4, 5],
+            billing_firm=[7, 8],
+            party=[9, 10],
+            loading_start_date=date(2025, 1, 1),
+            loading_end_date=date(2025, 1, 31),
+            search=" SO-2025 ",
+        )
+
+        response = list_transports(None, data)
+
+        filters = [call for call in queryset.filter.call_args_list]
+        self.assertIn(
+            call(is_active=True, bulk_transport__isnull=True),
+            filters,
+        )
+        self.assertIn(call(transporter_id__in=[12, 13]), filters)
+        self.assertIn(call(status="paid"), filters)
+        self.assertIn(call(commodity_id__in=[4, 5]), filters)
+        self.assertIn(call(billing_firm_id__in=[7, 8]), filters)
+        self.assertIn(call(loading_date__gte=date(2025, 1, 1)), filters)
+        self.assertIn(call(loading_date__lte=date(2025, 1, 31)), filters)
+        party_filter = next(
+            filter_call
+            for filter_call in filters
+            if filter_call.args
+            and isinstance(filter_call.args[0], Q)
+            and ("from_client_id__in", [9, 10]) in filter_call.args[0].children
+        )
+        self.assertEqual(
+            party_filter.args[0],
+            Q(from_client_id__in=[9, 10]) | Q(to_client_id__in=[9, 10]),
+        )
+        search_filter = next(
+            filter_call
+            for filter_call in filters
+            if filter_call.args
+            and isinstance(filter_call.args[0], Q)
+            and ("bill_no__icontains", "SO-2025")
+            in filter_call.args[0].children
+        )
+        self.assertEqual(search_filter.args[0].connector, Q.OR)
+        self.assertIn(
+            ("vehicle_no__icontains", "SO-2025"),
+            search_filter.args[0].children,
+        )
+        self.assertEqual(
+            search_filter.args[0].children[2].children,
+            [
+                ("items__is_active", True),
+                ("items__order__order_no__icontains", "SO-2025"),
+            ],
+        )
+        queryset.distinct.assert_called_once_with()
+        self.assertEqual(
+            response,
+            {
+                "success": True,
+                "data": {
+                    "page": 1,
+                    "page_size": 100,
+                    "total": 0,
+                    "total_pages": 0,
+                    "results": [],
+                },
+            },
+        )
+
+
+class TransportPaymentsListSchemaTests(TestCase):
+    def test_has_list_filters_and_pagination_defaults(self):
+        data = TransportPaymentsListSchema(
+            transporter=[12, 13],
+            status="paid",
+            commodity=[4, 5],
+            billing_firm=[7, 8],
+            party=[9, 10],
+            loading_start_date=date(2025, 1, 1),
+            loading_end_date=date(2025, 1, 31),
+            search=" SO-2025 ",
+        )
+
+        self.assertEqual(data.transporter, [12, 13])
+        self.assertEqual(data.status, "paid")
+        self.assertEqual(data.commodity, [4, 5])
+        self.assertEqual(data.billing_firm, [7, 8])
+        self.assertEqual(data.party, [9, 10])
+        self.assertEqual(data.loading_start_date, date(2025, 1, 1))
+        self.assertEqual(data.loading_end_date, date(2025, 1, 31))
+        self.assertEqual(data.search, " SO-2025 ")
+        self.assertEqual(data.page, 1)
+        self.assertEqual(data.page_size, 100)
+
+    @patch("SalesAndTransport.api.transport.transport_queryset")
+    @patch("SalesAndTransport.api.transport.serialize_transport_payment")
+    def test_applies_list_filters_and_preserves_payment_serialization(
+        self,
+        serialize_payment,
+        get_queryset,
+    ):
+        queryset = MagicMock()
+        get_queryset.return_value.prefetch_related.return_value = queryset
+        queryset.filter.return_value = queryset
+        queryset.distinct.return_value = queryset
+        queryset.order_by.return_value = queryset
+        queryset.count.return_value = 1
+        transport = object()
+        queryset.__getitem__.return_value = [transport]
+        serialize_payment.return_value = {"payment": "data"}
+        data = TransportPaymentsListSchema(
+            transporter=[12, 13],
+            status="paid",
+            commodity=[4, 5],
+            billing_firm=[7, 8],
+            party=[9, 10],
+            loading_start_date=date(2025, 1, 1),
+            loading_end_date=date(2025, 1, 31),
+            search=" SO-2025 ",
+        )
+
+        response = list_transport_payments(None, data)
+
+        filters = queryset.filter.call_args_list
+        self.assertIn(call(transporter_id__in=[12, 13]), filters)
+        self.assertIn(call(status="paid"), filters)
+        self.assertIn(call(commodity_id__in=[4, 5]), filters)
+        self.assertIn(call(billing_firm_id__in=[7, 8]), filters)
+        self.assertIn(call(loading_date__gte=date(2025, 1, 1)), filters)
+        self.assertIn(call(loading_date__lte=date(2025, 1, 31)), filters)
+        self.assertIn(
+            call(Q(from_client_id__in=[9, 10]) | Q(to_client_id__in=[9, 10])),
+            filters,
+        )
+        self.assertTrue(
+            any(
+                filter_call.args
+                and isinstance(filter_call.args[0], Q)
+                and ("bill_no__icontains", "SO-2025")
+                in filter_call.args[0].children
+                for filter_call in filters
+            )
+        )
+        queryset.distinct.assert_called_once_with()
+        serialize_payment.assert_called_once_with(transport)
+        self.assertEqual(
+            response["data"]["results"],
+            [{"payment": "data"}],
+        )
 
 class TransportStatusUpdateTests(TestCase):
     def test_schema_accepts_only_allowed_statuses(self):
@@ -465,6 +644,40 @@ class SerializeOrderForeignKeyTests(TestCase):
             ),
             (2, 3, 5, 4),
         )
+
+
+class OrderListFilterTests(TestCase):
+    def test_maps_list_filters_and_order_number_search(self):
+        data = OrderListSchema(
+            status="pending",
+            contract_date_from="2025-01-01",
+            contract_date_to="2025-12-31",
+            from_client=[1, 2],
+            to_client=[3, 4],
+            type="sales_order",
+            broker=[5, 6],
+            commodity=[7, 8],
+            search="SO-2025",
+            page=2,
+        )
+
+        self.assertEqual(
+            get_filters(data),
+            {
+                "status": "pending",
+                "type": "sales_order",
+                "from_client_id__in": [1, 2],
+                "to_client_id__in": [3, 4],
+                "broker_id__in": [5, 6],
+                "commodity_id__in": [7, 8],
+                "contract_date__gte": date(2025, 1, 1),
+                "contract_date__lte": date(2025, 12, 31),
+                "order_no__icontains": "SO-2025",
+            },
+        )
+
+    def test_defaults_page_size_to_100(self):
+        self.assertEqual(OrderListSchema().page_size, 100)
 
 
 class SerializeTransporterBankTests(TestCase):

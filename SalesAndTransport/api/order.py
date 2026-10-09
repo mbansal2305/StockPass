@@ -94,8 +94,23 @@ def paginate_queryset(queryset, page: int, page_size: int, serializer):
 def get_filters(data):
     filters = data.model_dump(
         exclude_none=True,
-        exclude={"page", "page_size", "contract_date_from", "contract_date_to"},
+        exclude={
+            "page",
+            "page_size",
+            "contract_date_from",
+            "contract_date_to",
+            "from_client",
+            "to_client",
+            "broker",
+            "commodity",
+            "search",
+        },
     )
+
+    for field in ("from_client", "to_client", "broker", "commodity"):
+        values = getattr(data, field)
+        if values is not None:
+            filters[f"{field}_id__in"] = values
 
     contract_date_from = getattr(data, "contract_date_from", None)
     contract_date_to = getattr(data, "contract_date_to", None)
@@ -104,6 +119,10 @@ def get_filters(data):
         filters["contract_date__gte"] = contract_date_from
     if contract_date_to is not None:
         filters["contract_date__lte"] = contract_date_to
+
+    search = getattr(data, "search", None)
+    if search:
+        filters["order_no__icontains"] = search
 
     return filters
 
@@ -365,5 +384,4 @@ def list_orders(request, data: OrderListSchema):
         }
     except ValueError as error:
         return 400, {"success": False, "message": str(error)}
-
 
