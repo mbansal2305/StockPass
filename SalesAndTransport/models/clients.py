@@ -78,6 +78,7 @@ class BusinessClient(BaseModel):
     flag = models.CharField(
         max_length=30,
         choices=ClientFlag.choices,
+        default=ClientFlag.NEUTRAL,
         blank=True,
         null=True,
         db_index=True,
